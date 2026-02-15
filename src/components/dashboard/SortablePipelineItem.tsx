@@ -66,7 +66,7 @@ export function SortablePipelineItem({
       >
         <CardContent className="space-y-2 p-3">
           {/* Top row: priority + deadline */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             {prio ? (
               <Badge className={`border text-[10px] ${prio.bg} ${prio.color}`}>
                 {item.prioridade} - {prio.label}
@@ -76,7 +76,7 @@ export function SortablePipelineItem({
                 Sem prioridade
               </Badge>
             )}
-            <DeadlineBadge date={item.data_encerramento_proposta} />
+            <DeadlineBadge date={item.data_encerramento_proposta} showDate />
           </div>
 
           {/* Object title */}

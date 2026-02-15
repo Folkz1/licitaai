@@ -167,28 +167,22 @@ function daysUntil(date: string) {
   return diff;
 }
 
-function getUrgencyConfig(days: number | null) {
+function getUrgencyConfig(days: number | null, date: string) {
+  const dateStr = date ? new Date(date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "-";
+  
   if (days === null)
-    return { text: "Sem prazo", color: "text-slate-500", bg: "bg-slate-800" };
+    return { text: "Sem prazo", shortText: "-", color: "text-slate-500", bg: "bg-slate-800", date: dateStr };
   if (days < 0)
-    return { text: "Encerrada", color: "text-red-500", bg: "bg-red-950/50" };
+    return { text: "Encerrada", shortText: "-", color: "text-red-500", bg: "bg-red-950/50", date: dateStr };
   if (days === 0)
-    return { text: "HOJE!", color: "text-red-400", bg: "bg-red-900/40" };
+    return { text: "HOJE!", shortText: "HOJE", color: "text-red-400", bg: "bg-red-900/40 animate-pulse", date: dateStr };
   if (days <= 2)
-    return { text: `${days}d`, color: "text-red-400", bg: "bg-red-900/30" };
+    return { text: `${days} dia${days > 1 ? 's' : ''}`, shortText: `${days}d`, color: "text-red-400", bg: "bg-red-900/30", date: dateStr };
   if (days <= 5)
-    return {
-      text: `${days}d`,
-      color: "text-orange-400",
-      bg: "bg-orange-900/30",
-    };
+    return { text: `${days} dias`, shortText: `${days}d`, color: "text-orange-400", bg: "bg-orange-900/30", date: dateStr };
   if (days <= 10)
-    return { text: `${days}d`, color: "text-amber-400", bg: "bg-amber-900/20" };
-  return {
-    text: `${days}d`,
-    color: "text-emerald-400",
-    bg: "bg-emerald-900/20",
-  };
+    return { text: `${days} dias`, shortText: `${days}d`, color: "text-amber-400", bg: "bg-amber-900/20", date: dateStr };
+  return { text: `${days} dias`, shortText: `${days}d`, color: "text-emerald-400", bg: "bg-emerald-900/20", date: dateStr };
 }
 
 export default function LicitacoesPage() {
@@ -404,9 +398,9 @@ export default function LicitacoesPage() {
       ) : (
         /* Licitações Cards */
         <div className="space-y-3">
-          {data.map((lic) => {
+              {data.map((lic) => {
             const days = daysUntil(lic.data_encerramento_proposta);
-            const urgency = getUrgencyConfig(days);
+            const urgency = getUrgencyConfig(days, lic.data_encerramento_proposta);
             const priority = PRIORITY_CONFIG[lic.prioridade] || null;
             const status = STATUS_CONFIG[lic.status] || {
               label: lic.status,
@@ -528,7 +522,7 @@ export default function LicitacoesPage() {
 
                       {/* Deadline */}
                       <div
-                        className={`flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[70px] ${urgency.bg}`}
+                        className={`flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[80px] ${urgency.bg}`}
                       >
                         <Clock
                           className={`h-3.5 w-3.5 ${urgency.color} mb-0.5`}
@@ -538,11 +532,9 @@ export default function LicitacoesPage() {
                         >
                           {urgency.text}
                         </span>
-                        {lic.data_encerramento_proposta && (
-                          <span className="text-[10px] text-slate-600 mt-0.5">
-                            {formatDate(lic.data_encerramento_proposta)}
-                          </span>
-                        )}
+                        <span className="text-[10px] text-slate-500 mt-0.5">
+                          {urgency.date}
+                        </span>
                       </div>
 
                       {/* Actions */}
