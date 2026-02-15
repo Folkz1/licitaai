@@ -14,8 +14,13 @@ export async function GET(req: NextRequest) {
   // Auth: either Vercel Cron header or Bearer token
   const authHeader = req.headers.get("authorization");
   const cronSecret = process.env.CRON_SECRET || process.env.N8N_WEBHOOK_SECRET;
+  
+  // Debug log
+  console.log('[CRON] Auth header:', authHeader ? authHeader.substring(0, 20) + '...' : 'null');
+  console.log('[CRON] Cron secret env:', cronSecret ? 'set' : 'NOT SET');
 
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+    console.log('[CRON] Unauthorized - secret mismatch');
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
