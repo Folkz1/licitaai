@@ -15,9 +15,10 @@ export async function POST() {
     const onboardingSession = await queryOne<{
       id: string;
       ai_generated_config: Record<string, unknown>;
+      step_3_data: Record<string, unknown>;
       step_4_data: Record<string, unknown>;
     }>(
-      `SELECT id, ai_generated_config, step_4_data 
+      `SELECT id, ai_generated_config, step_3_data, step_4_data 
        FROM onboarding_sessions 
        WHERE tenant_id = $1 AND status = 'IN_PROGRESS'
        ORDER BY created_at DESC 
@@ -33,10 +34,31 @@ export async function POST() {
     }
 
     const config = onboardingSession.ai_generated_config;
+    const step3Data = onboardingSession.step_3_data || {};
     const step4Data = onboardingSession.step_4_data || {};
     
     // Se não tem config da IA, usar dados do step 4 diretamente
     const hasConfig = config && Object.keys(config).length > 0;
+    
+    // Keywords da IA ou fallback para keywords manuais do step 3
+    const keywordsInclusao = (config.keywords_inclusao as string[]) || (step3Data.palavras_chave_manual as string[]) || [];
+    const keywordsExclusao = (config.keywords_exclusao as string[]) || [];
+    
+    // Se não tem keywords de IA, gerar do step 3 (produtos_servicos)
+    const finalKeywordsInclusao = keywordsInclusao.length > 0 ? keywordsInclusao : 
+      ((step3Data.produtos_servicos as string) || '').toLowerCase()
+        .split(/[,\n]+/)
+        .map(w => w.trim())
+        .filter(w => w.length > 2)
+        .slice(0, 20);
+    
+    // Gerar keywords de exclusão do step 3 se não houver
+    const finalKeywordsExclusao = keywordsExclusao.length > 0 ? keywordsExclusao :
+      ((step3Data.exclusoes as string) || '').toLowerCase()
+        .split(/[,\n]+/)
+        .map(w => w.trim())
+        .filter(w => w.length > 2)
+        .slice(0, 10);
     
     // 1. Inserir/atualizar configuracoes_busca
     const filtrosBusca = hasConfig ? (config.filtros_busca as Record<string, unknown>) : {};
@@ -88,8 +110,7 @@ export async function POST() {
     );
 
     // 2. Inserir keywords de inclusão
-    const keywordsInclusao = (config.keywords_inclusao as string[]) || [];
-    for (const keyword of keywordsInclusao) {
+    for (const keyword of finalKeywordsInclusao) {
       await query(
         `INSERT INTO palavras_chave (tenant_id, palavra, tipo, peso, source, categoria)
          VALUES ($1, $2, 'INCLUSAO', 10, 'AI_GENERATED', 'onboarding')
@@ -99,8 +120,7 @@ export async function POST() {
     }
 
     // 3. Inserir keywords de exclusão
-    const keywordsExclusao = (config.keywords_exclusao as string[]) || [];
-    for (const keyword of keywordsExclusao) {
+    for (const keyword of finalKeywordsExclusao) {
       await query(
         `INSERT INTO palavras_chave (tenant_id, palavra, tipo, peso, source, categoria)
          VALUES ($1, $2, 'EXCLUSAO', 10, 'AI_GENERATED', 'onboarding')
@@ -155,10 +175,10 @@ export async function POST() {
       success: true,
       redirect: '/dashboard',
       summary: {
-        keywords_inclusao: keywordsInclusao.length,
-        keywords_exclusao: keywordsExclusao.length,
-        ufs: (filtrosBusca.ufs_prioritarias as string[])?.length || 0,
-        modalidades: (filtrosBusca.modalidades_recomendadas as number[])?.length || 0
+        keywords_inclusao: finalKeywordsInclusao.length,
+        keywords_exclusao: finalKeywordsExclusao.length,
+        ufs: (filtrosBusca.ufs_prioritarias as string[])?.length || (step4Data.ufs_interesse as string[])?.length || 0,
+        modalidades: (filtrosBusca.modalidades_recomendadas as number[])?.length || (step4Data.modalidades as number[])?.length || 0
       }
     });
   } catch (error) {

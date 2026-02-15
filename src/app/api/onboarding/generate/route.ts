@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
-import { queryOne } from '@/lib/db';
+import { query, queryOne } from '@/lib/db';
 import { streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
