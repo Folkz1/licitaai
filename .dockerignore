@@ -1,0 +1,34 @@
+# Dependencies
+node_modules
+node_modules/*
+
+# Build outputs
+.next
+out
+build
+dist
+
+# Tests
+coverage
+
+# Misc
+.DS_Store
+*.log
+npm-debug.log*
+
+# Local env files
+.env
+.env*.local
+.env.production
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# IDE
+.idea
+.vscode
+
+# Git
+.git
+.gitignore
