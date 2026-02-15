@@ -43,6 +43,8 @@ interface Licitacao {
   objeto_compra: string;
   valor_total_estimado: number;
   data_encerramento_proposta: string;
+  data_abertura_propostas: string;
+  data_limite_envio_propostas: string;
   data_publicacao: string;
   uf: string;
   municipio: string;
@@ -159,7 +161,7 @@ function formatDate(date: string) {
   });
 }
 
-function daysUntil(date: string) {
+function daysUntil(date: string | null) {
   if (!date) return null;
   const diff = Math.ceil(
     (new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
@@ -167,7 +169,11 @@ function daysUntil(date: string) {
   return diff;
 }
 
-function getUrgencyConfig(days: number | null, date: string) {
+function getDeadlineDate(lic: Licitacao): string | null {
+  return lic.data_encerramento_proposta || lic.data_limite_envio_propostas || lic.data_abertura_propostas || null;
+}
+
+function getUrgencyConfig(days: number | null, date: string | null) {
   const dateStr = date ? new Date(date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "-";
   
   if (days === null)
@@ -399,8 +405,9 @@ export default function LicitacoesPage() {
         /* Licitações Cards */
         <div className="space-y-3">
               {data.map((lic) => {
-            const days = daysUntil(lic.data_encerramento_proposta);
-            const urgency = getUrgencyConfig(days, lic.data_encerramento_proposta);
+            const deadlineDate = getDeadlineDate(lic);
+            const days = daysUntil(deadlineDate);
+            const urgency = getUrgencyConfig(days, deadlineDate);
             const priority = PRIORITY_CONFIG[lic.prioridade] || null;
             const status = STATUS_CONFIG[lic.status] || {
               label: lic.status,
