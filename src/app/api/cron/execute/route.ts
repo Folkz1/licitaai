@@ -10,7 +10,7 @@ import { NextRequest, NextResponse } from "next/server";
 // 2. External: curl -H "Authorization: Bearer SECRET" https://your-app.com/api/cron/execute
 // 3. EasyPanel: add a cron job that hits this endpoint
 
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
   // Auth: either Vercel Cron header or Bearer token
   let authHeader = req.headers.get("authorization") || "";
   const cronSecret = process.env.CRON_SECRET || process.env.N8N_WEBHOOK_SECRET;
