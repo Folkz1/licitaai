@@ -6,11 +6,11 @@ function formatDateFull(dateStr: string) {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
-export function DeadlineBadge({ date, showDate = false, licitacao }: { date?: string; showDate?: boolean; licitacao?: { data_encerramento_proposta?: string; data_abertura_propostas?: string; data_limite_envio_propostas?: string } | null }) {
+export function DeadlineBadge({ date, showDate = false, licitacao }: { date?: string | null; showDate?: boolean; licitacao?: { data_encerramento_proposta?: string; data_abertura_propostas?: string; data_limite_envio_propostas?: string } | null }) {
   const effectiveDate = date || (licitacao ? getDeadlineDate(licitacao) : null);
   const days = daysUntil(effectiveDate);
   
-  if (days === null) return null;
+  if (days === null || !effectiveDate) return null;
 
   if (days < 0) {
     return (
