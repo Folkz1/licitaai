@@ -43,6 +43,11 @@ interface Licitacao {
   objeto_compra: string;
   valor_total_estimado: number;
   data_encerramento_proposta: string;
+<<<<<<< HEAD
+  data_abertura_propostas: string;
+  data_limite_envio_propostas: string;
+=======
+>>>>>>> master
   data_publicacao: string;
   uf: string;
   municipio: string;
@@ -52,12 +57,18 @@ interface Licitacao {
   link_sistema_origem: string;
   modalidade_contratacao: string;
   tipo_participacao: string;
+<<<<<<< HEAD
+=======
   tipo_oportunidade: string;
+>>>>>>> master
   score_relevancia: number;
   justificativa: string;
   amostra_exigida: boolean;
   valor_itens_relevantes: number;
+<<<<<<< HEAD
+=======
   expirada: boolean;
+>>>>>>> master
 }
 
 interface Pagination {
@@ -161,7 +172,11 @@ function formatDate(date: string) {
   });
 }
 
+<<<<<<< HEAD
+function daysUntil(date: string | null) {
+=======
 function daysUntil(date: string) {
+>>>>>>> master
   if (!date) return null;
   const diff = Math.ceil(
     (new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
@@ -169,6 +184,28 @@ function daysUntil(date: string) {
   return diff;
 }
 
+<<<<<<< HEAD
+function getDeadlineDate(lic: Licitacao): string | null {
+  return lic.data_encerramento_proposta || lic.data_limite_envio_propostas || lic.data_abertura_propostas || null;
+}
+
+function getUrgencyConfig(days: number | null, date: string | null) {
+  const dateStr = date ? new Date(date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "-";
+  
+  if (days === null)
+    return { text: "Sem prazo", shortText: "-", color: "text-slate-500", bg: "bg-slate-800", date: dateStr };
+  if (days < 0)
+    return { text: "Encerrada", shortText: "-", color: "text-red-500", bg: "bg-red-950/50", date: dateStr };
+  if (days === 0)
+    return { text: "HOJE!", shortText: "HOJE", color: "text-red-400", bg: "bg-red-900/40 animate-pulse", date: dateStr };
+  if (days <= 2)
+    return { text: `${days} dia${days > 1 ? 's' : ''}`, shortText: `${days}d`, color: "text-red-400", bg: "bg-red-900/30", date: dateStr };
+  if (days <= 5)
+    return { text: `${days} dias`, shortText: `${days}d`, color: "text-orange-400", bg: "bg-orange-900/30", date: dateStr };
+  if (days <= 10)
+    return { text: `${days} dias`, shortText: `${days}d`, color: "text-amber-400", bg: "bg-amber-900/20", date: dateStr };
+  return { text: `${days} dias`, shortText: `${days}d`, color: "text-emerald-400", bg: "bg-emerald-900/20", date: dateStr };
+=======
 function getUrgencyConfig(days: number | null) {
   if (days === null)
     return { text: "Sem prazo", color: "text-slate-500", bg: "bg-slate-800" };
@@ -191,6 +228,7 @@ function getUrgencyConfig(days: number | null) {
     color: "text-emerald-400",
     bg: "bg-emerald-900/20",
   };
+>>>>>>> master
 }
 
 export default function LicitacoesPage() {
@@ -406,9 +444,16 @@ export default function LicitacoesPage() {
       ) : (
         /* Licitações Cards */
         <div className="space-y-3">
+<<<<<<< HEAD
+              {data.map((lic) => {
+            const deadlineDate = getDeadlineDate(lic);
+            const days = daysUntil(deadlineDate);
+            const urgency = getUrgencyConfig(days, deadlineDate);
+=======
           {data.map((lic) => {
             const days = daysUntil(lic.data_encerramento_proposta);
             const urgency = getUrgencyConfig(days);
+>>>>>>> master
             const priority = PRIORITY_CONFIG[lic.prioridade] || null;
             const status = STATUS_CONFIG[lic.status] || {
               label: lic.status,
@@ -470,23 +515,29 @@ export default function LicitacoesPage() {
                             Amostra
                           </span>
                         )}
+<<<<<<< HEAD
+=======
                         {lic.tipo_oportunidade === "PRE_TRIAGEM_REJEITAR" && (
                           <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-red-300 bg-red-900/30 border border-red-700/30">
                             <XCircle className="h-2.5 w-2.5" />
                             IA Rejeitou
                           </span>
                         )}
+>>>>>>> master
                         {lic.tipo_participacao === "ME/EPP" && (
                           <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-cyan-300 bg-cyan-900/30">
                             ME/EPP
                           </span>
                         )}
+<<<<<<< HEAD
+=======
                         {lic.expirada && (
                           <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-red-300 bg-red-900/40 border border-red-700/30">
                             <AlertTriangle className="h-2.5 w-2.5" />
                             Expirada
                           </span>
                         )}
+>>>>>>> master
                       </div>
 
                       {/* Object */}
@@ -542,7 +593,11 @@ export default function LicitacoesPage() {
 
                       {/* Deadline */}
                       <div
+<<<<<<< HEAD
+                        className={`flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[80px] ${urgency.bg}`}
+=======
                         className={`flex flex-col items-center justify-center rounded-lg px-3 py-2 min-w-[70px] ${urgency.bg}`}
+>>>>>>> master
                       >
                         <Clock
                           className={`h-3.5 w-3.5 ${urgency.color} mb-0.5`}
@@ -552,11 +607,17 @@ export default function LicitacoesPage() {
                         >
                           {urgency.text}
                         </span>
+<<<<<<< HEAD
+                        <span className="text-[10px] text-slate-500 mt-0.5">
+                          {urgency.date}
+                        </span>
+=======
                         {lic.data_encerramento_proposta && (
                           <span className="text-[10px] text-slate-600 mt-0.5">
                             {formatDate(lic.data_encerramento_proposta)}
                           </span>
                         )}
+>>>>>>> master
                       </div>
 
                       {/* Actions */}

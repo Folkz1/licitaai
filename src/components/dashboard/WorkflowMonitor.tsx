@@ -128,6 +128,8 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
     );
   }
 
+<<<<<<< HEAD
+=======
   async function cancelExecution(id: string) {
     if (!confirm("Tem certeza que deseja cancelar esta execução?")) return;
     try {
@@ -142,6 +144,7 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
     }
   }
 
+>>>>>>> master
   function renderExecution(exec: Execution) {
     const isActive = exec.status === "RUNNING" || exec.status === "PENDING";
     const isExpanded = expandedLogs === exec.id;
@@ -168,7 +171,11 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
                 </span>
                 {getStatusBadge(exec.status)}
               </div>
+<<<<<<< HEAD
+              <p className="text-xs text-slate-500 mt-0.5">
+=======
               <p className={`text-xs mt-0.5 ${isActive ? "text-indigo-300/80" : "text-slate-500"}`}>
+>>>>>>> master
                 {exec.current_step || "Aguardando..."}
               </p>
             </div>
@@ -177,6 +184,8 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
             <span className="text-[10px] text-slate-600 font-mono">
               {formatDuration(exec.started_at, exec.finished_at)}
             </span>
+<<<<<<< HEAD
+=======
             {isActive && (
               <Button
                 variant="ghost"
@@ -188,6 +197,7 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
                 Cancelar
               </Button>
             )}
+>>>>>>> master
             {logs.length > 0 && (
               <button
                 onClick={() => setExpandedLogs(isExpanded ? null : exec.id)}
@@ -205,6 +215,14 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
         {isActive && (
           <div className="mt-3">
             <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+<<<<<<< HEAD
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-purple-500 transition-all duration-500"
+                style={{ width: `${Math.max(5, exec.progress)}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-600 mt-1 text-right">{exec.progress}%</p>
+=======
               {exec.progress > 0 ? (
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-purple-500 transition-all duration-500"
@@ -217,6 +235,7 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
             {exec.progress > 0 && (
               <p className="text-[10px] text-slate-600 mt-1 text-right">{exec.progress}%</p>
             )}
+>>>>>>> master
           </div>
         )}
 
