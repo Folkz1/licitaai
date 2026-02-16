@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
+import { generatePrompts } from '@/lib/prompts';
 
 // POST - Completar onboarding e salvar configurações
 export async function POST() {
@@ -170,6 +171,51 @@ export async function POST() {
         [session.user.tenantId]
       );
     }
+
+    // 7. Gerar e salvar prompts personalizados
+    const promptContext = {
+      empresa: {
+        razao_social: (step1Data.razao_social as string) || '',
+        nome_fantasia: (step1Data.nome_fantasia as string) || '',
+        porte: (step1Data.porte as string) || '',
+        setor: (step1Data.setor as string) || '',
+        descricao: (step1Data.descricao_livre as string) || ''
+      },
+      ramo: {
+        principal: (step2Data.ramo_principal as string) || '',
+        secundario: (step2Data.ramo_secundario as string[]) || [],
+        experiencia_pregao: (step2Data.experiencia_pregao as boolean) || false,
+        tipos_clientes: (step2Data.tipos_clientes as string[]) || []
+      },
+      produtos: {
+        lista: (step3Data.produtos_servicos as string) || '',
+        palavras_chave_manual: (step3Data.palavras_chave_manual as string[]) || [],
+        exclusoes: (step3Data.exclusoes as string) || ''
+      },
+      preferencias: {
+        ufs: (step4Data.ufs_interesse as string[]) || [],
+        modalidades: ((step4Data.modalidades as number[]) || []).map(m => ({ codigo: String(m), nome: `Modalidade ${m}` })),
+        valor_minimo: (step4Data.valor_minimo as number) || 0,
+        valor_maximo: (step4Data.valor_maximo as number) || null
+      }
+    };
+
+    const prompts = generatePrompts(promptContext);
+
+    // Salvar prompts no banco
+    await query(
+      `INSERT INTO custom_prompts (tenant_id, prompt_type, content, is_active)
+       VALUES ($1, 'PRE_TRIAGEM', $2, true)
+       ON CONFLICT (tenant_id, prompt_type) DO UPDATE SET content = EXCLUDED.content, is_active = true, updated_at = NOW()`,
+      [session.user.tenantId, prompts.PRE_TRIAGEM]
+    );
+
+    await query(
+      `INSERT INTO custom_prompts (tenant_id, prompt_type, content, is_active)
+       VALUES ($1, 'ANALISE_COMPLETA', $2, true)
+       ON CONFLICT (tenant_id, prompt_type) DO UPDATE SET content = EXCLUDED.content, is_active = true, updated_at = NOW()`,
+      [session.user.tenantId, prompts.ANALISE_COMPLETA]
+    );
 
     return NextResponse.json({
       success: true,

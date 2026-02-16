@@ -36,6 +36,7 @@ import {
   Settings,
   Trash2,
   Save,
+  Bot,
 } from "lucide-react";
 
 interface SearchConfig {
@@ -91,12 +92,15 @@ export default function ConfiguracoesPage() {
   const [configs, setConfigs] = useState<SearchConfig[]>([]);
   const [keywords, setKeywords] = useState<Keyword[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [prompts, setPrompts] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [newKeyword, setNewKeyword] = useState("");
   const [keywordType, setKeywordType] = useState<"INCLUSAO" | "EXCLUSAO">("INCLUSAO");
   const [saving, setSaving] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingConfig, setEditingConfig] = useState<SearchConfig | null>(null);
+  const [editingPromptType, setEditingPromptType] = useState<string | null>(null);
+  const [promptContent, setPromptContent] = useState("");
   const [configForm, setConfigForm] = useState({
     nome: "",
     ufs: [] as string[],
@@ -114,10 +118,11 @@ export default function ConfiguracoesPage() {
 
   async function fetchAll() {
     setLoading(true);
-    const [configsRes, keywordsRes, schedulesRes] = await Promise.all([
+    const [configsRes, keywordsRes, schedulesRes, promptsRes] = await Promise.all([
       fetch("/api/configuracoes"),
       fetch("/api/configuracoes/keywords"),
       fetch("/api/configuracoes/schedules"),
+      fetch("/api/configuracoes/prompts"),
     ]);
     if (configsRes.ok) {
       const data = await configsRes.json();
@@ -129,7 +134,24 @@ export default function ConfiguracoesPage() {
     if (schedulesRes.ok) {
       setSchedules(await schedulesRes.json());
     }
+    if (promptsRes.ok) {
+      setPrompts(await promptsRes.json());
+    }
     setLoading(false);
+  }
+
+  async function savePrompt() {
+    if (!editingPromptType || !promptContent) return;
+    setSaving(true);
+    await fetch("/api/configuracoes/prompts", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt_type: editingPromptType, content: promptContent }),
+    });
+    setSaving(false);
+    setEditingPromptType(null);
+    setPromptContent("");
+    fetchAll();
   }
 
   async function addKeyword() {
@@ -273,6 +295,9 @@ export default function ConfiguracoesPage() {
         <TabsList className="bg-slate-800">
           <TabsTrigger value="configs">Configurações de Busca</TabsTrigger>
           <TabsTrigger value="keywords">Palavras-chave</TabsTrigger>
+          <TabsTrigger value="prompts">
+            <Bot className="h-4 w-4 mr-1" /> Prompts IA
+          </TabsTrigger>
         </TabsList>
 
         {/* Search Configs Tab */}
@@ -533,6 +558,68 @@ export default function ConfiguracoesPage() {
             </Card>
           </div>
         </TabsContent>
+
+        {/* Prompts Tab */}
+        <TabsContent value="prompts" className="space-y-4">
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-white">
+                <Bot className="h-5 w-5 text-indigo-400" />
+                Prompts Personalizados para IA
+              </CardTitle>
+              <p className="text-sm text-slate-400">
+                Os prompts são gerados automaticamente com base no onboarding. Você pode editá-los para customizar o comportamento da IA.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Pré-Triagem */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 font-medium">Pré-Triagem</Label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingPromptType("PRE_TRIAGEM");
+                      setPromptContent(prompts["PRE_TRIAGEM"] || "");
+                    }}
+                  >
+                    <Settings className="h-3 w-3 mr-1" /> Editar
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Usado para classificar licitações como "Analisar" ou "Rejeitar" antes da análise completa.
+                </p>
+                <pre className="text-xs bg-slate-950 p-3 rounded-lg overflow-x-auto max-h-32 text-slate-300">
+                  {prompts["PRE_TRIAGEM"]?.substring(0, 500) || "Prompt não gerado ainda"}
+                </pre>
+              </div>
+
+              {/* Análise Completa */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-slate-300 font-medium">Análise Completa</Label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingPromptType("ANALISE_COMPLETA");
+                      setPromptContent(prompts["ANALISE_COMPLETA"] || "");
+                    }}
+                  >
+                    <Settings className="h-3 w-3 mr-1" /> Editar
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  Usado para extrair itens, valores e informações detalhadas do edital.
+                </p>
+                <pre className="text-xs bg-slate-950 p-3 rounded-lg overflow-x-auto max-h-32 text-slate-300">
+                  {prompts["ANALISE_COMPLETA"]?.substring(0, 500) || "Prompt não gerado ainda"}
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Dialog for add/edit config */}
@@ -653,6 +740,38 @@ export default function ConfiguracoesPage() {
             <Button onClick={saveConfig} disabled={saving || !configForm.nome} className="bg-indigo-600 hover:bg-indigo-500">
               {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog for edit prompt */}
+      <Dialog open={!!editingPromptType} onOpenChange={(open) => !open && setEditingPromptType(null)}>
+        <DialogContent className="max-w-3xl border-slate-700 bg-slate-900 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {editingPromptType === "PRE_TRIAGEM" ? "Editar Prompt de Pré-Triagem" : "Editar Prompt de Análise Completa"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-slate-400">
+              Use as variáveis <code className="bg-slate-800 px-1 rounded">&#123;&#123; $json.campo &#125;&#125;</code> para inserir dados dinâmicos.
+            </p>
+            <div>
+              <Label className="text-slate-400">Conteúdo do Prompt</Label>
+              <textarea
+                value={promptContent}
+                onChange={(e) => setPromptContent(e.target.value)}
+                className="w-full h-96 border-slate-700 bg-slate-800 text-white text-sm p-4 rounded-lg font-mono"
+                placeholder="Digite o prompt..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setEditingPromptType(null)}>Cancelar</Button>
+            <Button onClick={savePrompt} disabled={saving} className="bg-indigo-600 hover:bg-indigo-500">
+              {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+              Salvar Prompt
             </Button>
           </DialogFooter>
         </DialogContent>
