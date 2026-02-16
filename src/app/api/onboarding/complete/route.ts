@@ -16,10 +16,12 @@ export async function POST() {
     const onboardingSession = await queryOne<{
       id: string;
       ai_generated_config: Record<string, unknown>;
+      step_1_data: Record<string, unknown>;
+      step_2_data: Record<string, unknown>;
       step_3_data: Record<string, unknown>;
       step_4_data: Record<string, unknown>;
     }>(
-      `SELECT id, ai_generated_config, step_3_data, step_4_data 
+      `SELECT id, ai_generated_config, step_1_data, step_2_data, step_3_data, step_4_data 
        FROM onboarding_sessions 
        WHERE tenant_id = $1 AND status = 'IN_PROGRESS'
        ORDER BY created_at DESC 
@@ -35,6 +37,8 @@ export async function POST() {
     }
 
     const config = onboardingSession.ai_generated_config;
+    const step1Data = onboardingSession.step_1_data || {};
+    const step2Data = onboardingSession.step_2_data || {};
     const step3Data = onboardingSession.step_3_data || {};
     const step4Data = onboardingSession.step_4_data || {};
     
