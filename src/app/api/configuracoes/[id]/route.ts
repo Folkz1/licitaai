@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { nome, ufs, modalidades, dias_retroativos, valor_minimo, valor_maximo } = body;
+  const { nome, ufs, modalidades, dias_retroativos, valor_minimo, valor_maximo, buscar_srp, buscar_me_epp } = body;
 
   if (!nome) {
     return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 });
@@ -22,8 +22,9 @@ export async function POST(req: NextRequest) {
     `INSERT INTO configuracoes_busca (
       tenant_id, nome, ufs, modalidades_contratacao, 
       dias_retroativos, valor_minimo, valor_maximo, 
+      buscar_srp, buscar_me_epp,
       ativo, source
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, true, 'MANUAL')
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, 'MANUAL')
     RETURNING id`,
     [
       tenantId,
@@ -33,6 +34,8 @@ export async function POST(req: NextRequest) {
       dias_retroativos || 15,
       valor_minimo || 0,
       valor_maximo || null,
+      buscar_srp ?? true,
+      buscar_me_epp ?? true,
     ]
   );
 
@@ -49,7 +52,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { id, nome, ufs, modalidades, dias_retroativos, valor_minimo, valor_maximo, ativo } = body;
+  const { id, nome, ufs, modalidades, dias_retroativos, valor_minimo, valor_maximo, ativo, buscar_srp, buscar_me_epp } = body;
 
   if (!id) {
     return NextResponse.json({ error: "ID é obrigatório" }, { status: 400 });
@@ -64,9 +67,11 @@ export async function PUT(req: NextRequest) {
       valor_minimo = COALESCE($5, valor_minimo),
       valor_maximo = $6,
       ativo = COALESCE($7, ativo),
+      buscar_srp = COALESCE($8, buscar_srp),
+      buscar_me_epp = COALESCE($9, buscar_me_epp),
       updated_at = NOW()
-    WHERE id = $8 AND tenant_id = $9`,
-    [nome, ufs, modalidades, dias_retroativos, valor_minimo, valor_maximo, ativo, id, tenantId]
+    WHERE id = $10 AND tenant_id = $11`,
+    [nome, ufs, modalidades, dias_retroativos, valor_minimo, valor_maximo, ativo, buscar_srp, buscar_me_epp, id, tenantId]
   );
 
   return NextResponse.json({ success: true });

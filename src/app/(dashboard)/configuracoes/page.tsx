@@ -8,13 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -22,6 +15,13 @@ import {
   DialogTrigger,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   RefreshCw,
   Plus,
@@ -35,7 +35,7 @@ import {
   Calendar,
   Settings,
   Trash2,
-  Copy,
+  Save,
 } from "lucide-react";
 
 interface SearchConfig {
@@ -48,6 +48,8 @@ interface SearchConfig {
   valor_maximo: number | null;
   ativo: boolean;
   source: string;
+  buscar_srp: boolean;
+  buscar_me_epp: boolean;
   created_at: string;
 }
 
@@ -56,7 +58,6 @@ interface Keyword {
   palavra: string;
   tipo: "INCLUSAO" | "EXCLUSAO";
   peso: number;
-  categoria: string | null;
 }
 
 interface Schedule {
@@ -84,6 +85,7 @@ const MODALIDADES = [
   { value: 9, label: "Pregão Presencial" },
   { value: 10, label: "RDC" },
 ];
+const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"];
 
 export default function ConfiguracoesPage() {
   const [configs, setConfigs] = useState<SearchConfig[]>([]);
@@ -102,6 +104,8 @@ export default function ConfiguracoesPage() {
     dias_retroativos: 15,
     valor_minimo: 0,
     valor_maximo: null as number | null,
+    buscar_srp: true,
+    buscar_me_epp: true,
   });
 
   useEffect(() => {
@@ -146,8 +150,10 @@ export default function ConfiguracoesPage() {
 
   async function saveConfig() {
     setSaving(true);
-    await fetch("/api/configuracoes", {
-      method: editingConfig ? "PUT" : "POST",
+    const url = editingConfig ? "/api/configuracoes" : "/api/configuracoes";
+    const method = editingConfig ? "PUT" : "POST";
+    await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         id: editingConfig?.id,
@@ -157,7 +163,7 @@ export default function ConfiguracoesPage() {
     setSaving(false);
     setDialogOpen(false);
     setEditingConfig(null);
-    setConfigForm({ nome: "", ufs: [], modalidades: [], dias_retroativos: 15, valor_minimo: 0, valor_maximo: null });
+    setConfigForm({ nome: "", ufs: [], modalidades: [], dias_retroativos: 15, valor_minimo: 0, valor_maximo: null, buscar_srp: true, buscar_me_epp: true });
     fetchAll();
   }
 
@@ -211,8 +217,28 @@ export default function ConfiguracoesPage() {
       dias_retroativos: config.dias_retroativos || 15,
       valor_minimo: config.valor_minimo || 0,
       valor_maximo: config.valor_maximo,
+      buscar_srp: config.buscar_srp ?? true,
+      buscar_me_epp: config.buscar_me_epp ?? true,
     });
     setDialogOpen(true);
+  }
+
+  async function createScheduleForConfig(configId: number, workflow: string) {
+    await fetch("/api/configuracoes/schedules", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        config_id: configId,
+        workflow,
+        enabled: true,
+        frequency: "DAILY",
+        hour: workflow === "BUSCA_PNCP" ? 6 : 8,
+        minute: 0,
+        days_of_week: [1, 2, 3, 4, 5],
+        params: workflow === "ANALISE_EDITAIS" ? { max_licitacoes: 10 } : {},
+      }),
+    });
+    fetchAll();
   }
 
   if (loading) {
@@ -233,7 +259,7 @@ export default function ConfiguracoesPage() {
         <Button
           onClick={() => {
             setEditingConfig(null);
-            setConfigForm({ nome: "", ufs: [], modalidades: [], dias_retroativos: 15, valor_minimo: 0, valor_maximo: null });
+            setConfigForm({ nome: "", ufs: [], modalidades: [], dias_retroativos: 15, valor_minimo: 0, valor_maximo: null, buscar_srp: true, buscar_me_epp: true });
             setDialogOpen(true);
           }}
           className="bg-indigo-600 hover:bg-indigo-500"
@@ -258,7 +284,7 @@ export default function ConfiguracoesPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-6">
               {configs.map((config) => (
                 <Card key={config.id} className={`border-slate-800 bg-slate-900/50 ${!config.ativo ? "opacity-50" : ""}`}>
                   <CardHeader className="pb-2">
@@ -283,8 +309,9 @@ export default function ConfiguracoesPage() {
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-3 text-sm">
-                    <div className="grid grid-cols-2 gap-2">
+                  <CardContent className="space-y-4">
+                    {/* Config Details */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
                       <div>
                         <span className="text-slate-500">UFs:</span>
                         <span className="ml-2 text-slate-300">{(config.ufs || []).join(", ") || "Todas"}</span>
@@ -304,19 +331,130 @@ export default function ConfiguracoesPage() {
                           {config.valor_maximo ? ` - R$ ${config.valor_maximo}` : ""}
                         </span>
                       </div>
+                      <div>
+                        <span className="text-slate-500">SRP:</span>
+                        <span className="ml-2 text-slate-300">{config.buscar_srp ? "Sim" : "Não"}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">ME/EPP:</span>
+                        <span className="ml-2 text-slate-300">{config.buscar_me_epp ? "Sim" : "Não"}</span>
+                      </div>
                     </div>
-                    
-                    {/* Schedule for this config */}
-                    {schedules.filter(s => s.config_id === config.id).map((schedule) => (
-                      <div key={schedule.workflow} className="rounded bg-slate-800/50 p-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">{schedule.workflow}</span>
-                          <span className="text-slate-500">
-                            {schedule.hour.toString().padStart(2, "0")}:{schedule.minute.toString().padStart(2, "0")} ({schedule.frequency})
-                          </span>
+
+                    {/* Schedules for this config */}
+                    <div className="border-t border-slate-800 pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-slate-400 flex items-center gap-2">
+                          <Clock className="h-4 w-4" /> Agendamentos
+                        </h4>
+                        <div className="flex gap-2">
+                          {!schedules.find(s => s.config_id === config.id && s.workflow === "BUSCA_PNCP") && (
+                            <Button size="sm" variant="outline" onClick={() => createScheduleForConfig(config.id, "BUSCA_PNCP")}>
+                              <Plus className="mr-1 h-3 w-3" /> Busca PNCP
+                            </Button>
+                          )}
+                          {!schedules.find(s => s.config_id === config.id && s.workflow === "ANALISE_EDITAIS") && (
+                            <Button size="sm" variant="outline" onClick={() => createScheduleForConfig(config.id, "ANALISE_EDITAIS")}>
+                              <Plus className="mr-1 h-3 w-3" /> Análise
+                            </Button>
+                          )}
                         </div>
                       </div>
-                    ))}
+                      
+                      {schedules.filter(s => s.config_id === config.id).map((schedule) => (
+                        <div key={schedule.workflow} className="bg-slate-800/50 rounded-lg p-3 mb-2">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-white">
+                              {schedule.workflow === "BUSCA_PNCP" ? "🔍 Busca PNCP" : "🤖 Análise de Editais"}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant={schedule.enabled ? "default" : "outline"}
+                                onClick={() => {
+                                  updateSchedule(schedule.workflow, config.id, { enabled: !schedule.enabled });
+                                  saveSchedule({ ...schedule, enabled: !schedule.enabled });
+                                }}
+                                className={schedule.enabled ? "bg-emerald-600" : ""}
+                              >
+                                {schedule.enabled ? <Play className="h-3 w-3 mr-1" /> : <Pause className="h-3 w-3 mr-1" />}
+                                {schedule.enabled ? "Ativo" : "Pausado"}
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-xs">
+                            <div>
+                              <Label className="text-slate-500">Frequência</Label>
+                              <Select
+                                value={schedule.frequency}
+                                onValueChange={(v) => {
+                                  updateSchedule(schedule.workflow, config.id, { frequency: v });
+                                }}
+                              >
+                                <SelectTrigger className="h-8 border-slate-700 bg-slate-800">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="border-slate-700 bg-slate-800">
+                                  <SelectItem value="HOURLY">Hora</SelectItem>
+                                  <SelectItem value="DAILY">Diário</SelectItem>
+                                  <SelectItem value="WEEKLY">Semanal</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-slate-500">Hora</Label>
+                              <Select
+                                value={String(schedule.hour)}
+                                onValueChange={(v) => {
+                                  updateSchedule(schedule.workflow, config.id, { hour: parseInt(v) });
+                                }}
+                              >
+                                <SelectTrigger className="h-8 border-slate-700 bg-slate-800">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="border-slate-700 bg-slate-800">
+                                  {Array.from({ length: 24 }, (_, i) => (
+                                    <SelectItem key={i} value={String(i)}>
+                                      {String(i).padStart(2, "0")}:00
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-slate-500">Dias</Label>
+                              <div className="flex gap-1 mt-1">
+                                {DAY_LABELS.map((label, i) => (
+                                  <button
+                                    key={i}
+                                    onClick={() => toggleDay(schedule.workflow, config.id, i)}
+                                    className={`rounded text-xs px-1.5 py-0.5 ${
+                                      schedule.days_of_week.includes(i) ? "bg-indigo-600 text-white" : "bg-slate-700 text-slate-400"
+                                    }`}
+                                  >
+                                    {label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full mt-2 bg-slate-700 hover:bg-slate-600"
+                            onClick={() => saveSchedule(schedule)}
+                            disabled={saving}
+                          >
+                            <Save className="mr-2 h-3 w-3" /> Salvar Agendamento
+                          </Button>
+                        </div>
+                      ))}
+                      
+                      {schedules.filter(s => s.config_id === config.id).length === 0 && (
+                        <p className="text-xs text-slate-500 text-center py-2">
+                          Nenhum agendamento. Clique nos botões acima para adicionar.
+                        </p>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -399,13 +537,13 @@ export default function ConfiguracoesPage() {
 
       {/* Dialog for add/edit config */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md border-slate-700 bg-slate-900">
+        <DialogContent className="max-w-lg border-slate-700 bg-slate-900 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingConfig ? "Editar Configuração" : "Nova Configuração"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
-              <Label className="text-slate-400">Nome</Label>
+              <Label className="text-slate-400">Nome *</Label>
               <Input
                 value={configForm.nome}
                 onChange={(e) => setConfigForm({ ...configForm, nome: e.target.value })}
@@ -413,18 +551,32 @@ export default function ConfiguracoesPage() {
                 className="border-slate-700 bg-slate-800 text-white"
               />
             </div>
+            
             <div>
-              <Label className="text-slate-400">UFs (separadas por vírgula)</Label>
-              <Input
-                value={configForm.ufs.join(", ")}
-                onChange={(e) => setConfigForm({ ...configForm, ufs: e.target.value.split(",").map(s => s.trim().toUpperCase()).filter(Boolean) })}
-                placeholder="SP, RJ, MG..."
-                className="border-slate-700 bg-slate-800 text-white"
-              />
+              <Label className="text-slate-400">UFs</Label>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {UFS.map((uf) => (
+                  <Button
+                    key={uf}
+                    size="sm"
+                    variant={configForm.ufs.includes(uf) ? "default" : "outline"}
+                    onClick={() => {
+                      const newUfs = configForm.ufs.includes(uf)
+                        ? configForm.ufs.filter((u) => u !== uf)
+                        : [...configForm.ufs, uf];
+                      setConfigForm({ ...configForm, ufs: newUfs });
+                    }}
+                    className={configForm.ufs.includes(uf) ? "bg-indigo-600" : ""}
+                  >
+                    {uf}
+                  </Button>
+                ))}
+              </div>
             </div>
+
             <div>
               <Label className="text-slate-400">Modalidades</Label>
-              <div className="flex flex-wrap gap-2 mt-1">
+              <div className="flex flex-wrap gap-1 mt-1">
                 {MODALIDADES.map((m) => (
                   <Button
                     key={m.value}
@@ -443,6 +595,7 @@ export default function ConfiguracoesPage() {
                 ))}
               </div>
             </div>
+
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <Label className="text-slate-400">Dias Retroativos</Label>
@@ -454,7 +607,7 @@ export default function ConfiguracoesPage() {
                 />
               </div>
               <div>
-                <Label className="text-slate-400">Valor Mínimo</Label>
+                <Label className="text-slate-400">Valor Mínimo (R$)</Label>
                 <Input
                   type="number"
                   value={configForm.valor_minimo}
@@ -463,7 +616,7 @@ export default function ConfiguracoesPage() {
                 />
               </div>
               <div>
-                <Label className="text-slate-400">Valor Máximo</Label>
+                <Label className="text-slate-400">Valor Máximo (R$)</Label>
                 <Input
                   type="number"
                   value={configForm.valor_maximo || ""}
@@ -473,11 +626,32 @@ export default function ConfiguracoesPage() {
                 />
               </div>
             </div>
+
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={configForm.buscar_srp}
+                  onChange={(e) => setConfigForm({ ...configForm, buscar_srp: e.target.checked })}
+                  className="rounded"
+                />
+                <span className="text-sm text-slate-300">Buscar SRP (Sistema de Registro de Preços)</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={configForm.buscar_me_epp}
+                  onChange={(e) => setConfigForm({ ...configForm, buscar_me_epp: e.target.checked })}
+                  className="rounded"
+                />
+                <span className="text-sm text-slate-300">Preferir ME/EPP</span>
+              </label>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={saveConfig} disabled={saving || !configForm.nome} className="bg-indigo-600 hover:bg-indigo-500">
-              {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {saving ? <RefreshCw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
               Salvar
             </Button>
           </DialogFooter>
