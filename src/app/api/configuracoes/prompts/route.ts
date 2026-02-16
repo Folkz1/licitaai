@@ -16,7 +16,7 @@ export async function GET() {
     [tenantId]
   );
 
-  const promptsByType = prompts.reduce((acc, p) => {
+  const promptsByType = (prompts as Array<{ prompt_type: string; content: string }>).reduce((acc, p) => {
     acc[p.prompt_type] = p.content;
     return acc;
   }, {} as Record<string, string>);
