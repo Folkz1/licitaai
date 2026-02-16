@@ -61,14 +61,14 @@ export async function GET(req: NextRequest) {
               l.data_publicacao, l.data_encerramento_proposta, l.uf, l.municipio,
               l.link_sistema_origem, l.status, l.review_phase, l.assigned_to,
               l.priority_override, l.created_at,
-              a.prioridade, a.score_relevancia, a.justificativa, a.amostra_exigida,
+              a.prioridade, a.tipo_oportunidade, a.score_relevancia, a.justificativa, a.amostra_exigida,
               a.valor_itens_relevantes,
               CASE WHEN l.data_encerramento_proposta < NOW() THEN true ELSE false END as expirada
        FROM licitacoes l
        LEFT JOIN analises a ON a.licitacao_id = l.id
        ${whereClause}
        ORDER BY expirada ASC, l.data_encerramento_proposta ASC NULLS LAST
-       LIMIT ${paramCount + 1} OFFSET ${paramCount + 2}`,
+       LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`,
       [...params, limit, offset]
     ),
     query(

@@ -52,6 +52,7 @@ interface Licitacao {
   link_sistema_origem: string;
   modalidade_contratacao: string;
   tipo_participacao: string;
+  tipo_oportunidade: string;
   score_relevancia: number;
   justificativa: string;
   amostra_exigida: boolean;
@@ -467,6 +468,12 @@ export default function LicitacoesPage() {
                           <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-amber-300 bg-amber-900/30">
                             <AlertTriangle className="h-2.5 w-2.5" />
                             Amostra
+                          </span>
+                        )}
+                        {lic.tipo_oportunidade === "PRE_TRIAGEM_REJEITAR" && (
+                          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-red-300 bg-red-900/30 border border-red-700/30">
+                            <XCircle className="h-2.5 w-2.5" />
+                            IA Rejeitou
                           </span>
                         )}
                         {lic.tipo_participacao === "ME/EPP" && (
