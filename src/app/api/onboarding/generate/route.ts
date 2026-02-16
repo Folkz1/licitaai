@@ -1,6 +1,10 @@
 import { NextRequest } from 'next/server';
 import { auth } from '@/lib/auth';
+<<<<<<< HEAD
 import { query, queryOne } from '@/lib/db';
+=======
+import { queryOne } from '@/lib/db';
+>>>>>>> master
 import { streamText } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 
@@ -30,11 +34,27 @@ Sugira configurações de busca otimizadas:
 - Modalidades mais adequadas ao perfil
 - Faixa de valores recomendada
 
+<<<<<<< HEAD
 ### 4. Prompt de Análise Personalizado
 Crie um prompt personalizado para análise de editais que considere:
 - Produtos/serviços específicos da empresa
 - Critérios de relevância
 - Pontos de atenção em editais
+=======
+### 4. Prompt de Pré-Triagem
+Crie um bloco de contexto para classificação rápida de licitações. Deve conter:
+- Seção "SOBRE A EMPRESA" com nome, segmento e produtos/serviços principais
+- Seção "CRITÉRIOS PARA ANALISAR" com termos e categorias que indicam relevância
+- Seção "CRITÉRIOS DE REJEIÇÃO" com categorias claramente irrelevantes
+O prompt será usado por uma IA para decidir rapidamente se uma licitação merece análise detalhada.
+
+### 5. Prompt de Análise Completa
+Crie um prompt personalizado para análise detalhada de editais que considere:
+- Produtos/serviços específicos da empresa
+- Critérios de relevância e priorização
+- Pontos de atenção em editais
+- Regras de porte (ME/EPP se aplicável)
+>>>>>>> master
 
 ## Formato de Resposta
 Responda APENAS em JSON válido no seguinte formato:
@@ -50,6 +70,10 @@ Responda APENAS em JSON válido no seguinte formato:
     "buscar_srp": boolean,
     "buscar_me_epp": boolean
   },
+<<<<<<< HEAD
+=======
+  "prompt_pre_triagem": "...",
+>>>>>>> master
   "prompt_analise": "...",
   "justificativa": "..."
 }`;
@@ -341,6 +365,12 @@ function generateTemplateConfig(context: {
   const diasRetroativos = (context.preferencias.dias_retroativos as number) || 15;
   const porte = (context.empresa.porte as string) || '';
 
+<<<<<<< HEAD
+=======
+  const empresaNome = (context.empresa.razao_social as string) || (context.empresa.nome_fantasia as string) || 'a empresa';
+  const ramoNome = (context.ramo.principal as string) || 'não especificado';
+
+>>>>>>> master
   return {
     keywords_inclusao: keywordsInclusao,
     keywords_exclusao: keywordsExclusao,
@@ -353,22 +383,55 @@ function generateTemplateConfig(context: {
       buscar_srp: true,
       buscar_me_epp: ['ME', 'EPP', 'MEI'].includes(porte)
     },
+<<<<<<< HEAD
     prompt_analise: `Analise este edital para uma empresa do setor ${(context.ramo.principal as string) || 'não especificado'}.
 
 PRODUTOS/SERVIÇOS OFERECIDOS:
 ${produtosLista || 'Não especificado'}
+=======
+    prompt_pre_triagem: `SOBRE A EMPRESA:
+- Nome: ${empresaNome}
+- Segmento: ${ramoNome}
+- Porte: ${porte || 'Não informado'}
+- Produtos/Serviços: ${produtosLista || 'Não especificado'}
+
+CRITÉRIOS PARA ANALISAR (enviar para análise detalhada se mencionar):
+${keywordsInclusao.map(k => `- ${k}`).join('\n')}
+- Licitações genéricas que possam incluir itens do segmento
+
+CRITÉRIOS DE REJEIÇÃO IMEDIATA:
+${keywordsExclusao.map(k => `- ${k}`).join('\n')}
+- Produtos/serviços claramente fora do segmento da empresa
+- Obras, construção civil (se não for do ramo)
+- Veículos, combustíveis (se não for do ramo)`,
+    prompt_analise: `Analise este edital para ${empresaNome}, empresa do setor ${ramoNome}.
+
+SOBRE A EMPRESA:
+- Porte: ${porte || 'Não informado'}
+- Produtos/Serviços: ${produtosLista || 'Não especificado'}
+- Palavras-chave relevantes: ${keywordsInclusao.join(', ')}
+>>>>>>> master
 
 CRITÉRIOS DE RELEVÂNCIA:
 1. Verificar se há itens relacionados aos produtos/serviços oferecidos
 2. Identificar exigências técnicas compatíveis
 3. Verificar restrições de porte (${porte})
+<<<<<<< HEAD
 4. Calcular valor relevante
+=======
+4. Calcular valor dos itens relevantes vs total
+>>>>>>> master
 
 PONTOS DE ATENÇÃO:
 - Prazos de entrega
 - Exigências de certificação
 - Modalidade de participação
+<<<<<<< HEAD
 - Garantias exigidas`,
+=======
+- Garantias exigidas
+- Exigência de amostras`,
+>>>>>>> master
     justificativa: 'Configuração gerada automaticamente com base nos dados fornecidos e templates do setor.'
   };
 }

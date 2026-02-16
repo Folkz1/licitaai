@@ -55,8 +55,19 @@ export default function Step5Revisao({
 }: Step5RevisaoProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+<<<<<<< HEAD
   const [aiConfig, setAiConfig] = useState<AIGeneratedConfig | null>(
     session?.ai_generated_config || null
+=======
+
+  // ai_generated_config defaults to {} in DB — check for actual content, not just truthiness
+  const hasValidConfig = session?.ai_generated_config &&
+    Array.isArray(session.ai_generated_config.keywords_inclusao) &&
+    (session.ai_generated_config.keywords_inclusao as string[]).length > 0;
+
+  const [aiConfig, setAiConfig] = useState<AIGeneratedConfig | null>(
+    hasValidConfig ? session!.ai_generated_config : null
+>>>>>>> master
   );
   const [error, setError] = useState<string | null>(null);
 
@@ -141,11 +152,19 @@ export default function Step5Revisao({
     }
   };
 
+<<<<<<< HEAD
   // Auto-gerar se não tem configuração
+=======
+  // Auto-gerar se não tem configuração válida
+>>>>>>> master
   useEffect(() => {
     if (!aiConfig && !isGenerating) {
       generateConfig();
     }
+<<<<<<< HEAD
+=======
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+>>>>>>> master
   }, []);
 
   return (

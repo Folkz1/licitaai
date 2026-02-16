@@ -100,12 +100,20 @@ export default function PipelinePage() {
   }, [items, searchQuery, filterPriority]);
 
   const rejectedItems = useMemo(
+<<<<<<< HEAD
     () => filteredItems.filter((i) => i.review_phase === "REJEITADA"),
+=======
+    () => filteredItems.filter((i) => i.review_phase === "REJEITADA" || i.tipo_oportunidade === "PRE_TRIAGEM_REJEITAR"),
+>>>>>>> master
     [filteredItems]
   );
 
   const stats = useMemo(() => {
+<<<<<<< HEAD
     const active = items.filter((i) => i.review_phase !== "REJEITADA" && i.review_phase !== "CONCLUIDA");
+=======
+    const active = items.filter((i) => i.review_phase !== "REJEITADA" && i.review_phase !== "CONCLUIDA" && i.tipo_oportunidade !== "PRE_TRIAGEM_REJEITAR");
+>>>>>>> master
     const totalValue = active.reduce((s, i) => s + (Number(i.valor_total_estimado) || 0), 0);
     const urgent = active.filter((i) => {
       if (!i.data_encerramento_proposta) return false;
@@ -383,7 +391,11 @@ export default function PipelinePage() {
         <div className="flex flex-1 gap-3 overflow-x-auto pb-4 px-1" style={{ minHeight: "calc(100vh - 250px)" }}>
           {PHASES.map((phase) => {
             const phaseItems = filteredItems.filter(
+<<<<<<< HEAD
               (i) => (i.review_phase || "NOVA") === phase.key
+=======
+              (i) => (i.review_phase || "NOVA") === phase.key && i.tipo_oportunidade !== "PRE_TRIAGEM_REJEITAR"
+>>>>>>> master
             )
             .sort((a, b) => {
                 // Keep sort logic for consistency
@@ -438,6 +450,7 @@ export default function PipelinePage() {
             Rejeitadas ({rejectedItems.length})
           </h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+<<<<<<< HEAD
             {rejectedItems.map((item) => (
               <div
                 key={item.id}
@@ -461,6 +474,40 @@ export default function PipelinePage() {
                 </Button>
               </div>
             ))}
+=======
+            {rejectedItems.map((item) => {
+              const isAiRejected = item.tipo_oportunidade === "PRE_TRIAGEM_REJEITAR";
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center gap-3 rounded-lg border border-slate-800/50 bg-slate-900/30 p-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {isAiRejected && (
+                        <span className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium text-purple-300 bg-purple-900/40">
+                          <Brain className="h-2.5 w-2.5" />
+                          IA
+                        </span>
+                      )}
+                      <span className="block truncate text-sm text-slate-400 hover:text-white">
+                        {item.objeto_compra?.slice(0, 55)}
+                      </span>
+                    </div>
+                    <p className="truncate text-xs text-slate-600">{item.orgao_nome?.slice(0, 40)}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 shrink-0 text-[10px] text-indigo-400"
+                    onClick={() => moveToPhase(item.id, "NOVA")}
+                  >
+                    Restaurar
+                  </Button>
+                </div>
+              );
+            })}
+>>>>>>> master
           </div>
         </div>
       )}

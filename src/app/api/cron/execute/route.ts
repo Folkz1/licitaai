@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(req: NextRequest) {
   // Auth: either Vercel Cron header or Bearer token
+<<<<<<< HEAD
   let authHeader = req.headers.get("authorization") || "";
   const cronSecret = process.env.CRON_SECRET || process.env.N8N_WEBHOOK_SECRET;
 
@@ -25,6 +26,12 @@ export async function GET(req: NextRequest) {
     console.log('[CRON] No CRON_SECRET configured, skipping auth');
   } else if (authHeader !== cronSecret) {
     console.log('[CRON] Unauthorized - secret mismatch');
+=======
+  const authHeader = req.headers.get("authorization");
+  const cronSecret = process.env.CRON_SECRET || process.env.N8N_WEBHOOK_SECRET;
+
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+>>>>>>> master
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
 import { generatePrompts } from '@/lib/prompts';
+import { triggerBusca } from '@/lib/n8n/client';
 
 // POST - Completar onboarding e salvar configurações
 export async function POST() {
@@ -194,7 +195,7 @@ export async function POST() {
       produtos: {
         lista: (step3Data.produtos_servicos as string) || '',
         palavras_chave_manual: (step3Data.palavras_chave_manual as string[]) || [],
-        exclusoes: (step3Data.exclusoes as string) || ''
+        exclusoes: ((step3Data.exclusoes as string)?.split(/[,\n]+/).map(w => w.trim()).filter(w => w.length > 0)) || []
       },
       preferencias: {
         ufs: (step4Data.ufs_interesse as string[]) || [],
@@ -221,6 +222,31 @@ export async function POST() {
       [session.user.tenantId, prompts.ANALISE_COMPLETA]
     );
 
+    // 8. Auto-trigger primeira busca para o usuário ter dados imediatamente
+    let buscaTriggered = false;
+    try {
+      const execution = await queryOne<{ id: string }>(
+        `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
+         VALUES ($1, 'busca', 'PENDING', $2, 'Busca inicial pós-onboarding...', $3)
+         RETURNING id`,
+        [
+          session.user.tenantId,
+          session.user.id,
+          JSON.stringify([{ time: new Date().toISOString(), message: 'Busca automática pós-onboarding', level: 'info' }])
+        ]
+      );
+
+      await triggerBusca(session.user.tenantId, execution?.id!);
+
+      await query(
+        `UPDATE workflow_executions SET status = 'RUNNING', current_step = 'Conectando ao PNCP...' WHERE id = $1`,
+        [execution?.id]
+      );
+      buscaTriggered = true;
+    } catch (triggerError) {
+      console.error('Erro ao disparar busca automática pós-onboarding:', triggerError);
+    }
+
     return NextResponse.json({
       success: true,
       redirect: '/dashboard',
@@ -229,7 +255,8 @@ export async function POST() {
         keywords_exclusao: finalKeywordsExclusao.length,
         ufs: (filtrosBusca.ufs_prioritarias as string[])?.length || (step4Data.ufs_interesse as string[])?.length || 0,
         modalidades: (filtrosBusca.modalidades_recomendadas as number[])?.length || (step4Data.modalidades as number[])?.length || 0
-      }
+      },
+      busca_triggered: buscaTriggered
     });
   } catch (error) {
     console.error('Erro ao completar onboarding:', error);

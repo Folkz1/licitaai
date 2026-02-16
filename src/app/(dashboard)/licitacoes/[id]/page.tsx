@@ -29,6 +29,12 @@ import {
   DollarSign,
   FileText,
   AlertTriangle,
+<<<<<<< HEAD
+=======
+  Copy,
+  Clock,
+  Brain,
+>>>>>>> master
 } from "lucide-react";
 import Link from "next/link";
 
@@ -63,6 +69,10 @@ interface Analise {
   preferencias_me_epp: string;
   garantias: string;
   forma_fornecimento: string;
+<<<<<<< HEAD
+=======
+  campos_customizados: Record<string, unknown>;
+>>>>>>> master
 }
 
 interface Item {
@@ -113,6 +123,10 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
   const [history, setHistory] = useState<ReviewAction[]>([]);
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
+<<<<<<< HEAD
+=======
+  const [copied, setCopied] = useState<string | null>(null);
+>>>>>>> master
 
   useEffect(() => {
     fetchDetail();
@@ -167,6 +181,29 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
   const currentPhaseIdx = PHASES.indexOf(lic.review_phase);
   const nextPhase = currentPhaseIdx < PHASES.length - 1 ? PHASES[currentPhaseIdx + 1] : null;
 
+<<<<<<< HEAD
+=======
+  function copyToClipboard(text: string, label: string) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(() => {
+        setCopied(label);
+        setTimeout(() => setCopied(null), 2000);
+      });
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopied(label);
+      setTimeout(() => setCopied(null), 2000);
+    }
+  }
+
+>>>>>>> master
   return (
     <div className="space-y-6">
       {/* Back + Actions */}
@@ -226,6 +263,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
               {/* Links */}
               <div className="flex gap-3 pt-2">
                 {lic.numero_controle_pncp && (
+<<<<<<< HEAD
                   <a
                     href={`https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`}
                     target="_blank"
@@ -244,6 +282,24 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                   >
                     <ExternalLink className="h-3 w-3" /> Site de Origem
                   </a>
+=======
+                  <button
+                    onClick={() => copyToClipboard(`https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`, "pncp")}
+                    className="flex items-center gap-1 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    <Copy className="h-3 w-3" />
+                    {copied === "pncp" ? "Link copiado!" : "Copiar link PNCP"}
+                  </button>
+                )}
+                {lic.link_sistema_origem && (
+                  <button
+                    onClick={() => copyToClipboard(lic.link_sistema_origem, "origem")}
+                    className="flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                  >
+                    <Copy className="h-3 w-3" />
+                    {copied === "origem" ? "Link copiado!" : "Copiar link Origem"}
+                  </button>
+>>>>>>> master
                 )}
               </div>
             </div>
@@ -265,10 +321,19 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="border-slate-800 bg-slate-900/50">
                 <CardHeader>
+<<<<<<< HEAD
                   <CardTitle className="text-sm text-slate-300">Justificativa</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-slate-300">{analise.justificativa}</p>
+=======
+                  <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
+                    <Brain className="h-4 w-4 text-indigo-400" /> Justificativa da Análise IA
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-300 leading-relaxed">{analise.justificativa}</p>
+>>>>>>> master
                   {analise.amostra_exigida && (
                     <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-800 bg-amber-900/20 p-3">
                       <AlertTriangle className="h-4 w-4 text-amber-400" />
@@ -321,6 +386,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
               {analise.prazos && (
                 <Card className="border-slate-800 bg-slate-900/50">
                   <CardHeader>
+<<<<<<< HEAD
                     <CardTitle className="text-sm text-slate-300">Prazos</CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -329,6 +395,211 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                         ? JSON.stringify(parseJson(analise.prazos), null, 2)
                         : analise.prazos}
                     </pre>
+=======
+                    <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
+                      <Clock className="h-4 w-4 text-amber-400" /> Prazos Importantes
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const parsed = parseJson(analise.prazos);
+                      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(parsed).map(([key, value]) => (
+                              <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                                <span className="text-sm font-medium text-slate-400">
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <span className="text-sm text-white">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      if (Array.isArray(parsed)) {
+                        return (
+                          <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                            {parsed.map((item: string, i: number) => <li key={i}>{item}</li>)}
+                          </ul>
+                        );
+                      }
+                      return <p className="text-sm text-slate-300">{analise.prazos}</p>;
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {analise.requisitos_tecnicos && (
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardHeader>
+                    <CardTitle className="text-sm text-slate-300">Requisitos Técnicos</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const parsed = parseJson(analise.requisitos_tecnicos);
+                      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(parsed).map(([key, value]) => (
+                              <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                                <span className="text-sm font-medium text-slate-400">
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <span className="text-sm text-white">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      if (Array.isArray(parsed)) {
+                        return (
+                          <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
+                            {parsed.map((item: string, i: number) => <li key={i}>{String(item)}</li>)}
+                          </ul>
+                        );
+                      }
+                      return <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{String(parsed)}</p>;
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {analise.analise_riscos && (
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
+                      <AlertTriangle className="h-4 w-4 text-red-400" /> Análise de Riscos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const parsed = parseJson(analise.analise_riscos);
+                      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(parsed).map(([key, value]) => (
+                              <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                                <span className="text-sm font-medium text-slate-400">
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <span className="text-sm text-white">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{String(parsed)}</p>;
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {analise.garantias && (
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardHeader>
+                    <CardTitle className="text-sm text-slate-300">Garantias</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const parsed = parseJson(analise.garantias);
+                      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(parsed).map(([key, value]) => (
+                              <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                                <span className="text-sm font-medium text-slate-400">
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <span className="text-sm text-white">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return <p className="text-sm text-slate-300">{analise.garantias}</p>;
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {analise.preferencias_me_epp && (
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardHeader>
+                    <CardTitle className="text-sm text-slate-300">Preferências ME/EPP</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const parsed = parseJson(analise.preferencias_me_epp);
+                      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(parsed).map(([key, value]) => (
+                              <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                                <span className="text-sm font-medium text-slate-400">
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <span className="text-sm text-white">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return <p className="text-sm text-slate-300 leading-relaxed">{String(parsed)}</p>;
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {analise.forma_fornecimento && (
+                <Card className="border-slate-800 bg-slate-900/50">
+                  <CardHeader>
+                    <CardTitle className="text-sm text-slate-300">Forma de Fornecimento</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {(() => {
+                      const parsed = parseJson(analise.forma_fornecimento);
+                      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(parsed).map(([key, value]) => (
+                              <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                                <span className="text-sm font-medium text-slate-400">
+                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <span className="text-sm text-white">{String(value)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return <p className="text-sm text-slate-300 leading-relaxed">{String(parsed)}</p>;
+                    })()}
+                  </CardContent>
+                </Card>
+              )}
+
+              {analise.campos_customizados && Object.keys(analise.campos_customizados).length > 0 && (
+                <Card className="border-slate-800 bg-slate-900/50 md:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
+                      <FileText className="h-4 w-4 text-cyan-400" /> Dados Específicos
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      {Object.entries(analise.campos_customizados).map(([key, value]) => (
+                        <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                          <span className="text-sm font-medium text-slate-400">
+                            {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                          </span>
+                          <span className="text-sm text-white">
+                            {Array.isArray(value) ? (value as string[]).join(", ") : String(value ?? "-")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+>>>>>>> master
                   </CardContent>
                 </Card>
               )}

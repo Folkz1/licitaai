@@ -128,6 +128,23 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
     );
   }
 
+<<<<<<< HEAD
+=======
+  async function cancelExecution(id: string) {
+    if (!confirm("Tem certeza que deseja cancelar esta execução?")) return;
+    try {
+      await fetch("/api/n8n/status", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      fetchStatus(); // Refresh immediately
+    } catch (e) {
+      console.error("Failed to cancel", e);
+    }
+  }
+
+>>>>>>> master
   function renderExecution(exec: Execution) {
     const isActive = exec.status === "RUNNING" || exec.status === "PENDING";
     const isExpanded = expandedLogs === exec.id;
@@ -154,7 +171,11 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
                 </span>
                 {getStatusBadge(exec.status)}
               </div>
+<<<<<<< HEAD
               <p className="text-xs text-slate-500 mt-0.5">
+=======
+              <p className={`text-xs mt-0.5 ${isActive ? "text-indigo-300/80" : "text-slate-500"}`}>
+>>>>>>> master
                 {exec.current_step || "Aguardando..."}
               </p>
             </div>
@@ -163,6 +184,20 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
             <span className="text-[10px] text-slate-600 font-mono">
               {formatDuration(exec.started_at, exec.finished_at)}
             </span>
+<<<<<<< HEAD
+=======
+            {isActive && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-[10px] text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                onClick={() => cancelExecution(exec.id)}
+                title="Cancelar execução"
+              >
+                Cancelar
+              </Button>
+            )}
+>>>>>>> master
             {logs.length > 0 && (
               <button
                 onClick={() => setExpandedLogs(isExpanded ? null : exec.id)}
@@ -180,12 +215,27 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
         {isActive && (
           <div className="mt-3">
             <div className="h-1.5 rounded-full bg-slate-800 overflow-hidden">
+<<<<<<< HEAD
               <div
                 className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-purple-500 transition-all duration-500"
                 style={{ width: `${Math.max(5, exec.progress)}%` }}
               />
             </div>
             <p className="text-[10px] text-slate-600 mt-1 text-right">{exec.progress}%</p>
+=======
+              {exec.progress > 0 ? (
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-600 to-purple-500 transition-all duration-500"
+                  style={{ width: `${Math.max(5, exec.progress)}%` }}
+                />
+              ) : (
+                <div className="h-full w-1/3 rounded-full bg-gradient-to-r from-indigo-600 to-purple-500 animate-pulse" />
+              )}
+            </div>
+            {exec.progress > 0 && (
+              <p className="text-[10px] text-slate-600 mt-1 text-right">{exec.progress}%</p>
+            )}
+>>>>>>> master
           </div>
         )}
 

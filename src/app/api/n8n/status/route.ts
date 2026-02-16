@@ -54,3 +54,33 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ active: [], recent: [], has_running: false });
   }
 }
+<<<<<<< HEAD
+=======
+// DELETE /api/n8n/status
+// Cancel/Stop a specific workflow execution
+export async function DELETE(req: NextRequest) {
+  try {
+    const { tenantId } = await getEffectiveTenantId();
+    const { id } = await req.json();
+
+    if (!id) {
+      return NextResponse.json({ error: "Missing execution ID" }, { status: 400 });
+    }
+
+    await query(
+      `UPDATE workflow_executions 
+       SET status = 'ERROR', 
+           error_message = 'Cancelado manualmente pelo usuário', 
+           finished_at = NOW(),
+           progress = 100
+       WHERE id = $1 AND tenant_id = $2 AND status IN ('PENDING', 'RUNNING')`,
+      [id, tenantId]
+    );
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("Failed to cancel execution", error);
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  }
+}
+>>>>>>> master
