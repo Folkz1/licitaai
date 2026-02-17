@@ -174,9 +174,15 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-[10px] text-slate-600 font-mono">
-              {formatDuration(exec.started_at, exec.finished_at)}
-            </span>
+            <div className="text-right">
+              <span className="text-[10px] text-slate-500 block">
+                {new Date(exec.started_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}{" "}
+                {new Date(exec.started_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <span className="text-[10px] text-slate-600 font-mono">
+                {formatDuration(exec.started_at, exec.finished_at)}
+              </span>
+            </div>
             {isActive && (
               <Button
                 variant="ghost"
