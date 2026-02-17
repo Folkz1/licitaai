@@ -32,6 +32,8 @@ import {
   Copy,
   Clock,
   Brain,
+  Download,
+  Globe,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -107,6 +109,30 @@ function formatDate(d: string) {
 function parseJson(str: string) {
   if (!str) return null;
   try { return JSON.parse(str); } catch { return str; }
+}
+
+function buildPncpUrl(ncp: string) {
+  if (!ncp) return null;
+  return `https://pncp.gov.br/app/editais/${encodeURIComponent(ncp)}`;
+}
+
+function getPortalName(url: string) {
+  if (!url || url === "null") return null;
+  try {
+    const host = new URL(url).hostname.replace("www.", "");
+    if (host.includes("comprasnet")) return "ComprasNet";
+    if (host.includes("licitanet")) return "Licitanet";
+    if (host.includes("licitar")) return "Licitar";
+    if (host.includes("compras") && host.includes("publica")) return "Compras Publicas";
+    if (host.includes("bll")) return "BLL";
+    if (host.includes("bec.sp")) return "BEC/SP";
+    return host.split(".")[0];
+  } catch { return null; }
+}
+
+function buildEditalDownloadUrl(ncp: string) {
+  if (!ncp) return null;
+  return `https://pncp.gov.br/api/pncp/v1/orgaos/${ncp.split("-")[0]}/compras/${ncp}/arquivos`;
 }
 
 export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -248,24 +274,54 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                   <DollarSign className="h-4 w-4" /> {formatCurrency(lic.valor_total_estimado)}
                 </span>
               </div>
+              {/* Portal */}
+              {getPortalName(lic.link_sistema_origem) && (
+                <span className="flex items-center gap-1 text-sm text-slate-400">
+                  <Globe className="h-4 w-4" /> Portal: <span className="text-white">{getPortalName(lic.link_sistema_origem)}</span>
+                </span>
+              )}
               {/* Links */}
-              <div className="flex gap-3 pt-2">
+              <div className="flex flex-wrap gap-3 pt-2">
+                {lic.numero_controle_pncp && buildPncpUrl(lic.numero_controle_pncp) && (
+                  <a
+                    href={buildPncpUrl(lic.numero_controle_pncp)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-indigo-600/10 border border-indigo-500/30 px-3 py-1.5 text-sm text-indigo-400 hover:bg-indigo-600/20 transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Ver no PNCP
+                  </a>
+                )}
+                {lic.link_sistema_origem && lic.link_sistema_origem !== "null" && (
+                  <a
+                    href={lic.link_sistema_origem}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-emerald-600/10 border border-emerald-500/30 px-3 py-1.5 text-sm text-emerald-400 hover:bg-emerald-600/20 transition-colors"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    {getPortalName(lic.link_sistema_origem) || "Portal de Origem"}
+                  </a>
+                )}
+                {lic.numero_controle_pncp && (
+                  <a
+                    href={buildEditalDownloadUrl(lic.numero_controle_pncp)!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 rounded-lg bg-amber-600/10 border border-amber-500/30 px-3 py-1.5 text-sm text-amber-400 hover:bg-amber-600/20 transition-colors"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Edital / Anexos
+                  </a>
+                )}
                 {lic.numero_controle_pncp && (
                   <button
-                    onClick={() => copyToClipboard(`https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`, "pncp")}
-                    className="flex items-center gap-1 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
+                    onClick={() => copyToClipboard(buildPncpUrl(lic.numero_controle_pncp)!, "pncp")}
+                    className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-300 transition-colors"
                   >
                     <Copy className="h-3 w-3" />
-                    {copied === "pncp" ? "Link copiado!" : "Copiar link PNCP"}
-                  </button>
-                )}
-                {lic.link_sistema_origem && (
-                  <button
-                    onClick={() => copyToClipboard(lic.link_sistema_origem, "origem")}
-                    className="flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
-                  >
-                    <Copy className="h-3 w-3" />
-                    {copied === "origem" ? "Link copiado!" : "Copiar link Origem"}
+                    {copied === "pncp" ? "Copiado!" : "Copiar link"}
                   </button>
                 )}
               </div>

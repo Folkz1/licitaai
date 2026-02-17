@@ -163,10 +163,18 @@ function formatDate(date: string) {
 
 function daysUntil(date: string) {
   if (!date) return null;
+  // D+1: consider expired only the day AFTER the deadline
+  const deadline = new Date(date);
+  deadline.setDate(deadline.getDate() + 1);
   const diff = Math.ceil(
-    (new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+    (deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
   );
   return diff;
+}
+
+function buildPncpUrl(ncp: string) {
+  if (!ncp) return null;
+  return `https://pncp.gov.br/app/editais/${encodeURIComponent(ncp)}`;
 }
 
 function getUrgencyConfig(days: number | null) {
@@ -211,7 +219,7 @@ export default function LicitacoesPage() {
     priority: "",
     deadlineUntil: "",
   });
-  const [showFilters, setShowFilters] = useState(false);
+  const [showFilters, setShowFilters] = useState(true);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const fetchData = useCallback(
@@ -527,6 +535,23 @@ export default function LicitacoesPage() {
                             ? `${lic.municipio}/${lic.uf}`
                             : lic.uf}
                         </span>
+                        {lic.link_sistema_origem && lic.link_sistema_origem !== "null" && (
+                          <span className="inline-flex items-center gap-1 text-indigo-400/70">
+                            <ExternalLink className="h-3 w-3" />
+                            {(() => {
+                              try {
+                                const host = new URL(lic.link_sistema_origem).hostname.replace("www.", "");
+                                if (host.includes("comprasnet")) return "ComprasNet";
+                                if (host.includes("licitanet")) return "Licitanet";
+                                if (host.includes("licitar")) return "Licitar";
+                                if (host.includes("compras") && host.includes("publica")) return "Compras Publicas";
+                                if (host.includes("bll")) return "BLL";
+                                if (host.includes("bec.sp")) return "BEC/SP";
+                                return host.split(".")[0];
+                              } catch { return "Portal"; }
+                            })()}
+                          </span>
+                        )}
                         {lic.modalidade_contratacao && (
                           <span className="inline-flex items-center gap-1 text-slate-600">
                             {lic.modalidade_contratacao}
@@ -586,9 +611,9 @@ export default function LicitacoesPage() {
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </div>
-                        {lic.numero_controle_pncp && (
+                        {lic.numero_controle_pncp && buildPncpUrl(lic.numero_controle_pncp) && (
                           <a
-                            href={`https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`}
+                            href={buildPncpUrl(lic.numero_controle_pncp)!}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/60 text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"

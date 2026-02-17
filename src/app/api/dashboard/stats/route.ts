@@ -15,7 +15,7 @@ export async function GET() {
     query(
       `SELECT
         COUNT(*) as total,
-        COUNT(*) FILTER (WHERE status = 'ANALISADA') as analisadas,
+        COUNT(*) FILTER (WHERE status IN ('ANALISADA', 'SEM_EDITAL', 'ERRO_OCR') OR review_phase = 'REJEITADA') as analisadas,
         COUNT(*) FILTER (WHERE status = 'NOVA') as novas,
         COUNT(*) FILTER (WHERE review_phase IN ('DECISAO','PREPARACAO','PARTICIPANDO')) as no_pipeline,
         COUNT(*) FILTER (WHERE review_phase = 'CONCLUIDA') as concluidas,

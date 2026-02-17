@@ -469,6 +469,7 @@ export default function ConfiguracoesPage() {
           <TabsTrigger value="keywords">Palavras-chave</TabsTrigger>
           <TabsTrigger value="prompts">Prompts IA</TabsTrigger>
           <TabsTrigger value="busca">Busca</TabsTrigger>
+          <TabsTrigger value="apikeys">API Keys</TabsTrigger>
         </TabsList>
 
         {/* Schedule Tab */}
@@ -1055,6 +1056,24 @@ export default function ConfiguracoesPage() {
               </Card>
             ))
           )}
+        </TabsContent>
+
+        {/* API Keys Tab */}
+        <TabsContent value="apikeys" className="space-y-4">
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-indigo-600/10">
+                <Power className="h-8 w-8 text-indigo-400" />
+              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">API Keys</h3>
+              <p className="text-sm text-slate-400 max-w-md">
+                Em breve voce podera gerar chaves de API para integrar o LicitaAI com seus sistemas externos, ERPs e ferramentas de automacao.
+              </p>
+              <Badge className="mt-4 bg-indigo-600/20 text-indigo-300 border border-indigo-500/30">
+                Em breve
+              </Badge>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>
