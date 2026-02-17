@@ -10,7 +10,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [kpis, byUf, byPriority, byWeek, byPhase, urgent] = await Promise.all([
+  const [kpis, byUf, byPriority, byWeek, byPhase, urgent, todayActivity] = await Promise.all([
     // KPIs
     query(
       `SELECT
@@ -70,6 +70,22 @@ export async function GET() {
        LIMIT 5`,
       [tenantId]
     ),
+    // Today's activity
+    query(
+      `SELECT
+        COUNT(*) FILTER (WHERE l.created_at >= CURRENT_DATE) as novas_hoje,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE) as analisadas_hoje,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.prioridade = 'P1') as p1_hoje,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.prioridade = 'P2') as p2_hoje,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.prioridade = 'P3') as p3_hoje,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR') as rejeitadas_ia_hoje,
+        COUNT(*) FILTER (WHERE l.created_at >= CURRENT_DATE - INTERVAL '1 day' AND l.created_at < CURRENT_DATE) as novas_ontem,
+        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE - INTERVAL '1 day' AND a.created_at < CURRENT_DATE) as analisadas_ontem
+       FROM licitacoes l
+       LEFT JOIN analises a ON a.licitacao_id = l.id
+       WHERE l.tenant_id = $1`,
+      [tenantId]
+    ),
   ]);
 
   return NextResponse.json({
@@ -79,5 +95,6 @@ export async function GET() {
     byWeek,
     byPhase,
     urgent,
+    todayActivity: todayActivity[0],
   });
 }

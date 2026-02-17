@@ -52,6 +52,16 @@ interface Stats {
   byPhase: { phase: string; count: string }[];
   urgent?: { id: string; orgao_nome: string; objeto_compra: string; valor_total_estimado: number; data_encerramento_proposta: string; prioridade: string; uf: string }[];
   recentAnalyses?: { id: string; licitacao_id: string; prioridade: string; score_relevancia: number; justificativa: string; objeto_compra: string; orgao_nome: string }[];
+  todayActivity?: {
+    novas_hoje: string;
+    analisadas_hoje: string;
+    p1_hoje: string;
+    p2_hoje: string;
+    p3_hoje: string;
+    rejeitadas_ia_hoje: string;
+    novas_ontem: string;
+    analisadas_ontem: string;
+  };
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -159,6 +169,79 @@ export default function DashboardPage() {
         onBuscaComplete={fetchStats}
         onAnaliseComplete={fetchStats}
       />
+
+      {/* Today's Activity Summary */}
+      {stats.todayActivity && (
+        <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/30 via-slate-900/50 to-purple-950/30 p-4">
+          <div className="flex items-center gap-6 flex-wrap">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15">
+                <FileText className="h-4 w-4 text-sky-400" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-white leading-none">
+                  +{stats.todayActivity.novas_hoje}
+                </p>
+                <p className="text-[10px] text-slate-500">novas hoje</p>
+              </div>
+              {parseInt(stats.todayActivity.novas_ontem) > 0 && (
+                <span className="text-[10px] text-slate-600 ml-1">
+                  ({stats.todayActivity.novas_ontem} ontem)
+                </span>
+              )}
+            </div>
+
+            <div className="w-px h-8 bg-slate-800" />
+
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-lg font-bold text-white leading-none">
+                  {stats.todayActivity.analisadas_hoje}
+                </p>
+                <p className="text-[10px] text-slate-500">analisadas hoje</p>
+              </div>
+              {parseInt(stats.todayActivity.analisadas_ontem) > 0 && (
+                <span className="text-[10px] text-slate-600 ml-1">
+                  ({stats.todayActivity.analisadas_ontem} ontem)
+                </span>
+              )}
+            </div>
+
+            {parseInt(stats.todayActivity.analisadas_hoje) > 0 && (
+              <>
+                <div className="w-px h-8 bg-slate-800" />
+                <div className="flex items-center gap-3">
+                  {parseInt(stats.todayActivity.p1_hoje) > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 border border-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-400">
+                      <Flame className="h-3 w-3" />
+                      {stats.todayActivity.p1_hoje} P1
+                    </span>
+                  )}
+                  {parseInt(stats.todayActivity.p2_hoje) > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-400">
+                      <Target className="h-3 w-3" />
+                      {stats.todayActivity.p2_hoje} P2
+                    </span>
+                  )}
+                  {parseInt(stats.todayActivity.p3_hoje) > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-400">
+                      {stats.todayActivity.p3_hoje} P3
+                    </span>
+                  )}
+                  {parseInt(stats.todayActivity.rejeitadas_ia_hoje) > 0 && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2.5 py-1 text-xs font-medium text-slate-500">
+                      {stats.todayActivity.rejeitadas_ia_hoje} rejeitadas
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* KPI Cards - Row 1: Big numbers */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
