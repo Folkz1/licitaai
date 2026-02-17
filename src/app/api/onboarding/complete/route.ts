@@ -195,7 +195,7 @@ export async function POST() {
       produtos: {
         lista: (step3Data.produtos_servicos as string) || '',
         palavras_chave_manual: (step3Data.palavras_chave_manual as string[]) || [],
-        exclusoes: ((step3Data.exclusoes as string)?.split(/[,\n]+/).map(w => w.trim()).filter(w => w.length > 0)) || []
+        exclusoes: ((step3Data.exclusoes as string) || '').split(/[,\n]+/).map((w: string) => w.trim()).filter((w: string) => w.length > 0)
       },
       preferencias: {
         ufs: (step4Data.ufs_interesse as string[]) || [],
