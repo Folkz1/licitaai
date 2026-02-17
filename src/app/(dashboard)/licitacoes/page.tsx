@@ -174,7 +174,10 @@ function daysUntil(date: string) {
 
 function buildPncpUrl(ncp: string) {
   if (!ncp) return null;
-  return `https://pncp.gov.br/app/editais/${ncp}`;
+  // NCP format: {cnpj}-{esfera}-{sequencial}/{ano}
+  const parts = ncp.match(/^(\d+)-(\d+)-(\d+)\/(\d+)$/);
+  if (!parts) return null;
+  return `https://pncp.gov.br/app/editais/${parts[1]}/${parts[4]}/${parts[3]}`;
 }
 
 function getUrgencyConfig(days: number | null) {

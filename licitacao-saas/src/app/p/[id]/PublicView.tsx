@@ -229,7 +229,7 @@ export function PublicLicitacaoView({ licitacao: lic, analise, itemCount, itemVa
         <div className="mt-4 flex flex-wrap gap-3">
           {lic.numero_controle_pncp && (
             <a
-              href={`https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`}
+              href={(() => { const p = lic.numero_controle_pncp.match(/^(\d+)-(\d+)-(\d+)\/(\d+)$/); return p ? `https://pncp.gov.br/app/editais/${p[1]}/${p[4]}/${p[3]}` : `https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`; })()}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-800 bg-indigo-900/30 px-3 py-2 text-sm text-indigo-300 transition-colors hover:bg-indigo-900/50"
