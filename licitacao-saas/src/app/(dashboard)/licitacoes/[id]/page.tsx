@@ -113,7 +113,7 @@ function parseJson(str: string) {
 
 function buildPncpUrl(ncp: string) {
   if (!ncp) return null;
-  return `https://pncp.gov.br/app/editais/${encodeURIComponent(ncp)}`;
+  return `https://pncp.gov.br/app/editais/${ncp}`;
 }
 
 function getPortalName(url: string) {
@@ -132,7 +132,12 @@ function getPortalName(url: string) {
 
 function buildEditalDownloadUrl(ncp: string) {
   if (!ncp) return null;
-  return `https://pncp.gov.br/api/pncp/v1/orgaos/${ncp.split("-")[0]}/compras/${ncp}/arquivos`;
+  // NCP format: {cnpj}-{esfera}-{sequencial}/{ano}
+  // PNCP API: /orgaos/{cnpj}/compras/{ano}/{sequencial}/arquivos
+  const parts = ncp.match(/^(\d+)-(\d+)-(\d+)\/(\d+)$/);
+  if (!parts) return `https://pncp.gov.br/app/editais/${ncp}`;
+  const [, cnpj, , sequencial, ano] = parts;
+  return `https://pncp.gov.br/api/pncp/v1/orgaos/${cnpj}/compras/${ano}/${sequencial}/arquivos`;
 }
 
 export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: string }> }) {

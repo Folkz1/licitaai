@@ -174,7 +174,7 @@ function daysUntil(date: string) {
 
 function buildPncpUrl(ncp: string) {
   if (!ncp) return null;
-  return `https://pncp.gov.br/app/editais/${encodeURIComponent(ncp)}`;
+  return `https://pncp.gov.br/app/editais/${ncp}`;
 }
 
 function getUrgencyConfig(days: number | null) {
