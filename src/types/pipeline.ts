@@ -9,10 +9,7 @@ export interface PipelineItem {
   municipio: string;
   review_phase: string;
   prioridade: string;
-<<<<<<< HEAD
-=======
   tipo_oportunidade: string;
->>>>>>> master
   score_relevancia: number;
   modalidade_contratacao: string;
   assigned_to: string;

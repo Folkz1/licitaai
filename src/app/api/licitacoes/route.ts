@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const uf = searchParams.get("uf");
   const priority = searchParams.get("priority");
   const search = searchParams.get("search");
+  const deadlineUntil = searchParams.get("deadline_until");
 
   let whereClause = "WHERE l.tenant_id = $1";
   const params: unknown[] = [tenantId];
@@ -54,6 +55,12 @@ export async function GET(req: NextRequest) {
     params.push(`%${search}%`);
   }
 
+  if (deadlineUntil) {
+    paramCount++;
+    whereClause += ` AND l.data_encerramento_proposta <= $${paramCount}`;
+    params.push(deadlineUntil);
+  }
+
   const [rows, countResult] = await Promise.all([
     query(
       `SELECT l.id, l.numero_controle_pncp, l.orgao_nome, l.objeto_compra,
@@ -61,14 +68,6 @@ export async function GET(req: NextRequest) {
               l.data_publicacao, l.data_encerramento_proposta, l.uf, l.municipio,
               l.link_sistema_origem, l.status, l.review_phase, l.assigned_to,
               l.priority_override, l.created_at,
-<<<<<<< HEAD
-              a.prioridade, a.score_relevancia, a.justificativa, a.amostra_exigida,
-              a.valor_itens_relevantes
-       FROM licitacoes l
-       LEFT JOIN analises a ON a.licitacao_id = l.id
-       ${whereClause}
-       ORDER BY l.data_encerramento_proposta ASC NULLS LAST
-=======
               a.prioridade, a.tipo_oportunidade, a.score_relevancia, a.justificativa, a.amostra_exigida,
               a.valor_itens_relevantes,
               CASE WHEN l.data_encerramento_proposta < NOW() THEN true ELSE false END as expirada
@@ -76,7 +75,6 @@ export async function GET(req: NextRequest) {
        LEFT JOIN analises a ON a.licitacao_id = l.id
        ${whereClause}
        ORDER BY expirada ASC, l.data_encerramento_proposta ASC NULLS LAST
->>>>>>> master
        LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`,
       [...params, limit, offset]
     ),

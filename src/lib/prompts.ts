@@ -37,9 +37,7 @@ export function generatePrompts(context: {
   ].slice(0, 15);
   
   const keywordsExclusao = produtos.exclusoes
-    .map(e => e.toLowerCase())
-    .split(/[,\n]+/)
-    .map(w => w.trim())
+    .map(e => e.toLowerCase().trim())
     .filter(w => w.length > 2)
     .slice(0, 10);
 

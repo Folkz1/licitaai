@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { query, queryOne } from '@/lib/db';
-import { generatePrompts } from '@/lib/prompts';
 import { triggerBusca } from '@/lib/n8n/client';
 
 // POST - Completar onboarding e salvar configurações
@@ -17,12 +16,9 @@ export async function POST() {
     const onboardingSession = await queryOne<{
       id: string;
       ai_generated_config: Record<string, unknown>;
-      step_1_data: Record<string, unknown>;
-      step_2_data: Record<string, unknown>;
-      step_3_data: Record<string, unknown>;
       step_4_data: Record<string, unknown>;
     }>(
-      `SELECT id, ai_generated_config, step_1_data, step_2_data, step_3_data, step_4_data 
+      `SELECT id, ai_generated_config, step_4_data 
        FROM onboarding_sessions 
        WHERE tenant_id = $1 AND status = 'IN_PROGRESS'
        ORDER BY created_at DESC 
@@ -38,33 +34,10 @@ export async function POST() {
     }
 
     const config = onboardingSession.ai_generated_config;
-    const step1Data = onboardingSession.step_1_data || {};
-    const step2Data = onboardingSession.step_2_data || {};
-    const step3Data = onboardingSession.step_3_data || {};
     const step4Data = onboardingSession.step_4_data || {};
     
     // Se não tem config da IA, usar dados do step 4 diretamente
     const hasConfig = config && Object.keys(config).length > 0;
-    
-    // Keywords da IA ou fallback para keywords manuais do step 3
-    const keywordsInclusao = (config.keywords_inclusao as string[]) || (step3Data.palavras_chave_manual as string[]) || [];
-    const keywordsExclusao = (config.keywords_exclusao as string[]) || [];
-    
-    // Se não tem keywords de IA, gerar do step 3 (produtos_servicos)
-    const finalKeywordsInclusao = keywordsInclusao.length > 0 ? keywordsInclusao : 
-      ((step3Data.produtos_servicos as string) || '').toLowerCase()
-        .split(/[,\n]+/)
-        .map(w => w.trim())
-        .filter(w => w.length > 2)
-        .slice(0, 20);
-    
-    // Gerar keywords de exclusão do step 3 se não houver
-    const finalKeywordsExclusao = keywordsExclusao.length > 0 ? keywordsExclusao :
-      ((step3Data.exclusoes as string) || '').toLowerCase()
-        .split(/[,\n]+/)
-        .map(w => w.trim())
-        .filter(w => w.length > 2)
-        .slice(0, 10);
     
     // 1. Inserir/atualizar configuracoes_busca
     const filtrosBusca = hasConfig ? (config.filtros_busca as Record<string, unknown>) : {};
@@ -116,7 +89,8 @@ export async function POST() {
     );
 
     // 2. Inserir keywords de inclusão
-    for (const keyword of finalKeywordsInclusao) {
+    const keywordsInclusao = (config.keywords_inclusao as string[]) || [];
+    for (const keyword of keywordsInclusao) {
       await query(
         `INSERT INTO palavras_chave (tenant_id, palavra, tipo, peso, source, categoria)
          VALUES ($1, $2, 'INCLUSAO', 10, 'AI_GENERATED', 'onboarding')
@@ -126,7 +100,8 @@ export async function POST() {
     }
 
     // 3. Inserir keywords de exclusão
-    for (const keyword of finalKeywordsExclusao) {
+    const keywordsExclusao = (config.keywords_exclusao as string[]) || [];
+    for (const keyword of keywordsExclusao) {
       await query(
         `INSERT INTO palavras_chave (tenant_id, palavra, tipo, peso, source, categoria)
          VALUES ($1, $2, 'EXCLUSAO', 10, 'AI_GENERATED', 'onboarding')
@@ -157,7 +132,29 @@ export async function POST() {
       [onboardingSession.id]
     );
 
-    // 6. Criar cron_schedules padrão se não existirem
+    // 6. Salvar prompts dinâmicos para workflows n8n
+    const promptPreTriagem = (config.prompt_pre_triagem as string) || null;
+    const promptAnalise = (config.prompt_analise as string) || null;
+
+    if (promptPreTriagem) {
+      await query(
+        `INSERT INTO custom_prompts (tenant_id, prompt_type, content)
+         VALUES ($1, 'PRE_TRIAGEM', $2)
+         ON CONFLICT (tenant_id, prompt_type) DO UPDATE SET content = EXCLUDED.content, updated_at = NOW()`,
+        [session.user.tenantId, promptPreTriagem]
+      );
+    }
+
+    if (promptAnalise) {
+      await query(
+        `INSERT INTO custom_prompts (tenant_id, prompt_type, content)
+         VALUES ($1, 'ANALISE_COMPLETA', $2)
+         ON CONFLICT (tenant_id, prompt_type) DO UPDATE SET content = EXCLUDED.content, updated_at = NOW()`,
+        [session.user.tenantId, promptAnalise]
+      );
+    }
+
+    // 7. Criar cron_schedules padrão se não existirem
     const existingSchedules = await queryOne<{ id: string }>(
       `SELECT id FROM cron_schedules WHERE tenant_id = $1 AND workflow = 'BUSCA_PNCP'`,
       [session.user.tenantId]
@@ -177,51 +174,6 @@ export async function POST() {
       );
     }
 
-    // 7. Gerar e salvar prompts personalizados
-    const promptContext = {
-      empresa: {
-        razao_social: (step1Data.razao_social as string) || '',
-        nome_fantasia: (step1Data.nome_fantasia as string) || '',
-        porte: (step1Data.porte as string) || '',
-        setor: (step1Data.setor as string) || '',
-        descricao: (step1Data.descricao_livre as string) || ''
-      },
-      ramo: {
-        principal: (step2Data.ramo_principal as string) || '',
-        secundario: (step2Data.ramo_secundario as string[]) || [],
-        experiencia_pregao: (step2Data.experiencia_pregao as boolean) || false,
-        tipos_clientes: (step2Data.tipos_clientes as string[]) || []
-      },
-      produtos: {
-        lista: (step3Data.produtos_servicos as string) || '',
-        palavras_chave_manual: (step3Data.palavras_chave_manual as string[]) || [],
-        exclusoes: ((step3Data.exclusoes as string) || '').split(/[,\n]+/).map((w: string) => w.trim()).filter((w: string) => w.length > 0)
-      },
-      preferencias: {
-        ufs: (step4Data.ufs_interesse as string[]) || [],
-        modalidades: ((step4Data.modalidades as number[]) || []).map(m => ({ codigo: String(m), nome: `Modalidade ${m}` })),
-        valor_minimo: (step4Data.valor_minimo as number) || 0,
-        valor_maximo: (step4Data.valor_maximo as number) || null
-      }
-    };
-
-    const prompts = generatePrompts(promptContext);
-
-    // Salvar prompts no banco
-    await query(
-      `INSERT INTO custom_prompts (tenant_id, prompt_type, content, is_active)
-       VALUES ($1, 'PRE_TRIAGEM', $2, true)
-       ON CONFLICT (tenant_id, prompt_type) DO UPDATE SET content = EXCLUDED.content, is_active = true, updated_at = NOW()`,
-      [session.user.tenantId, prompts.PRE_TRIAGEM]
-    );
-
-    await query(
-      `INSERT INTO custom_prompts (tenant_id, prompt_type, content, is_active)
-       VALUES ($1, 'ANALISE_COMPLETA', $2, true)
-       ON CONFLICT (tenant_id, prompt_type) DO UPDATE SET content = EXCLUDED.content, is_active = true, updated_at = NOW()`,
-      [session.user.tenantId, prompts.ANALISE_COMPLETA]
-    );
-
     // 8. Auto-trigger primeira busca para o usuário ter dados imediatamente
     let buscaTriggered = false;
     try {
@@ -236,7 +188,7 @@ export async function POST() {
         ]
       );
 
-      await triggerBusca(session.user.tenantId, execution?.id!);
+      await triggerBusca(session.user.tenantId, execution?.id);
 
       await query(
         `UPDATE workflow_executions SET status = 'RUNNING', current_step = 'Conectando ao PNCP...' WHERE id = $1`,
@@ -250,13 +202,13 @@ export async function POST() {
     return NextResponse.json({
       success: true,
       redirect: '/dashboard',
+      busca_triggered: buscaTriggered,
       summary: {
-        keywords_inclusao: finalKeywordsInclusao.length,
-        keywords_exclusao: finalKeywordsExclusao.length,
-        ufs: (filtrosBusca.ufs_prioritarias as string[])?.length || (step4Data.ufs_interesse as string[])?.length || 0,
-        modalidades: (filtrosBusca.modalidades_recomendadas as number[])?.length || (step4Data.modalidades as number[])?.length || 0
-      },
-      busca_triggered: buscaTriggered
+        keywords_inclusao: keywordsInclusao.length,
+        keywords_exclusao: keywordsExclusao.length,
+        ufs: (filtrosBusca.ufs_prioritarias as string[])?.length || 0,
+        modalidades: (filtrosBusca.modalidades_recomendadas as number[])?.length || 0
+      }
     });
   } catch (error) {
     console.error('Erro ao completar onboarding:', error);

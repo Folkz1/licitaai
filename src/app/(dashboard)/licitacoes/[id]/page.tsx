@@ -29,12 +29,9 @@ import {
   DollarSign,
   FileText,
   AlertTriangle,
-<<<<<<< HEAD
-=======
   Copy,
   Clock,
   Brain,
->>>>>>> master
 } from "lucide-react";
 import Link from "next/link";
 
@@ -69,10 +66,7 @@ interface Analise {
   preferencias_me_epp: string;
   garantias: string;
   forma_fornecimento: string;
-<<<<<<< HEAD
-=======
   campos_customizados: Record<string, unknown>;
->>>>>>> master
 }
 
 interface Item {
@@ -123,10 +117,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
   const [history, setHistory] = useState<ReviewAction[]>([]);
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
-<<<<<<< HEAD
-=======
   const [copied, setCopied] = useState<string | null>(null);
->>>>>>> master
 
   useEffect(() => {
     fetchDetail();
@@ -181,8 +172,6 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
   const currentPhaseIdx = PHASES.indexOf(lic.review_phase);
   const nextPhase = currentPhaseIdx < PHASES.length - 1 ? PHASES[currentPhaseIdx + 1] : null;
 
-<<<<<<< HEAD
-=======
   function copyToClipboard(text: string, label: string) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(() => {
@@ -203,7 +192,6 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
     }
   }
 
->>>>>>> master
   return (
     <div className="space-y-6">
       {/* Back + Actions */}
@@ -263,26 +251,6 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
               {/* Links */}
               <div className="flex gap-3 pt-2">
                 {lic.numero_controle_pncp && (
-<<<<<<< HEAD
-                  <a
-                    href={`https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-sm text-indigo-400 hover:text-indigo-300"
-                  >
-                    <ExternalLink className="h-3 w-3" /> Ver no PNCP
-                  </a>
-                )}
-                {lic.link_sistema_origem && (
-                  <a
-                    href={lic.link_sistema_origem}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-sm text-emerald-400 hover:text-emerald-300"
-                  >
-                    <ExternalLink className="h-3 w-3" /> Site de Origem
-                  </a>
-=======
                   <button
                     onClick={() => copyToClipboard(`https://pncp.gov.br/app/editais/${lic.numero_controle_pncp}`, "pncp")}
                     className="flex items-center gap-1 text-sm text-indigo-400 hover:text-indigo-300 transition-colors"
@@ -299,7 +267,6 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                     <Copy className="h-3 w-3" />
                     {copied === "origem" ? "Link copiado!" : "Copiar link Origem"}
                   </button>
->>>>>>> master
                 )}
               </div>
             </div>
@@ -321,19 +288,12 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
             <div className="grid gap-4 md:grid-cols-2">
               <Card className="border-slate-800 bg-slate-900/50">
                 <CardHeader>
-<<<<<<< HEAD
-                  <CardTitle className="text-sm text-slate-300">Justificativa</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-slate-300">{analise.justificativa}</p>
-=======
                   <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
                     <Brain className="h-4 w-4 text-indigo-400" /> Justificativa da Análise IA
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-slate-300 leading-relaxed">{analise.justificativa}</p>
->>>>>>> master
                   {analise.amostra_exigida && (
                     <div className="mt-3 flex items-center gap-2 rounded-lg border border-amber-800 bg-amber-900/20 p-3">
                       <AlertTriangle className="h-4 w-4 text-amber-400" />
@@ -386,16 +346,6 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
               {analise.prazos && (
                 <Card className="border-slate-800 bg-slate-900/50">
                   <CardHeader>
-<<<<<<< HEAD
-                    <CardTitle className="text-sm text-slate-300">Prazos</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <pre className="text-sm text-slate-300 whitespace-pre-wrap">
-                      {typeof parseJson(analise.prazos) === "object"
-                        ? JSON.stringify(parseJson(analise.prazos), null, 2)
-                        : analise.prazos}
-                    </pre>
-=======
                     <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
                       <Clock className="h-4 w-4 text-amber-400" /> Prazos Importantes
                     </CardTitle>
@@ -599,7 +549,6 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                         </div>
                       ))}
                     </div>
->>>>>>> master
                   </CardContent>
                 </Card>
               )}

@@ -54,8 +54,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ active: [], recent: [], has_running: false });
   }
 }
-<<<<<<< HEAD
-=======
 // DELETE /api/n8n/status
 // Cancel/Stop a specific workflow execution
 export async function DELETE(req: NextRequest) {
@@ -83,4 +81,3 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
->>>>>>> master
