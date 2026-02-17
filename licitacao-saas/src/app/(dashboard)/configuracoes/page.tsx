@@ -129,6 +129,186 @@ const EMPTY_CONFIG: Omit<SearchConfig, "id" | "source"> = {
   ativa: true,
 };
 
+interface CustomField {
+  key: string;
+  label: string;
+  type: "text" | "number" | "boolean";
+}
+
+function OutputSchemaEditor({
+  prompts,
+  saving,
+  onSave,
+}: {
+  prompts: CustomPrompt[];
+  saving: string | null;
+  onSave: (content: string) => Promise<void>;
+}) {
+  const dbPrompt = prompts.find((p) => p.prompt_type === "OUTPUT_SCHEMA");
+
+  // Parse existing schema to extract campos_customizados
+  const parseFields = (): CustomField[] => {
+    if (!dbPrompt?.content) return [];
+    try {
+      const schema = JSON.parse(dbPrompt.content);
+      const custom = schema.campos_customizados || {};
+      return Object.entries(custom).map(([key, val]) => ({
+        key,
+        label: key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        type: typeof val === "number" ? "number" : typeof val === "boolean" ? "boolean" : "text",
+      }));
+    } catch {
+      return [];
+    }
+  };
+
+  const [fields, setFields] = useState<CustomField[]>(parseFields);
+  const [newFieldKey, setNewFieldKey] = useState("");
+  const [newFieldType, setNewFieldType] = useState<"text" | "number" | "boolean">("text");
+  const [hasChanges, setHasChanges] = useState(false);
+
+  function addField() {
+    const key = newFieldKey
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, "_")
+      .replace(/[^a-z0-9_]/g, "");
+    if (!key || fields.some((f) => f.key === key)) return;
+    setFields([...fields, { key, label: newFieldKey.trim(), type: newFieldType }]);
+    setNewFieldKey("");
+    setHasChanges(true);
+  }
+
+  function removeField(key: string) {
+    setFields(fields.filter((f) => f.key !== key));
+    setHasChanges(true);
+  }
+
+  function buildSchema(): string {
+    const custom: Record<string, string | number | boolean> = {};
+    for (const f of fields) {
+      if (f.type === "number") custom[f.key] = 0;
+      else if (f.type === "boolean") custom[f.key] = false;
+      else custom[f.key] = "";
+    }
+
+    // Merge with existing base schema or create new
+    let base: Record<string, unknown> = {};
+    try {
+      if (dbPrompt?.content) base = JSON.parse(dbPrompt.content);
+    } catch { /* ignore */ }
+
+    return JSON.stringify({ ...base, campos_customizados: custom }, null, 2);
+  }
+
+  return (
+    <Card className="border-slate-800 bg-slate-900/50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base text-white">
+          <Sparkles className="h-5 w-5 text-purple-400" />
+          Campos Personalizados (Saida IA)
+        </CardTitle>
+        <p className="text-xs text-slate-500">
+          Defina campos especificos do seu segmento que a IA deve preencher na analise. Esses campos aparecem como &quot;Dados Especificos&quot; na pagina de detalhes.
+        </p>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Current fields */}
+        {fields.length > 0 ? (
+          <div className="space-y-2">
+            {fields.map((f) => (
+              <div
+                key={f.key}
+                className="flex items-center justify-between rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-white">{f.label}</span>
+                  <Badge className="bg-slate-700 text-slate-300 text-[10px]">{f.key}</Badge>
+                  <Badge
+                    className={`text-[10px] ${
+                      f.type === "number"
+                        ? "bg-blue-900/50 text-blue-300"
+                        : f.type === "boolean"
+                          ? "bg-amber-900/50 text-amber-300"
+                          : "bg-emerald-900/50 text-emerald-300"
+                    }`}
+                  >
+                    {f.type === "text" ? "Texto" : f.type === "number" ? "Numero" : "Sim/Nao"}
+                  </Badge>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 w-7 p-0 text-slate-500 hover:text-red-400"
+                  onClick={() => removeField(f.key)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-700 py-6 text-center text-sm text-slate-500">
+            Nenhum campo personalizado. Adicione campos abaixo.
+          </div>
+        )}
+
+        {/* Add new field */}
+        <div className="flex items-end gap-2 rounded-lg border border-slate-700/30 bg-slate-800/30 p-3">
+          <div className="flex-1">
+            <Label className="text-xs text-slate-400">Nome do campo</Label>
+            <Input
+              value={newFieldKey}
+              onChange={(e) => setNewFieldKey(e.target.value)}
+              placeholder="Ex: tipo_equipamento"
+              className="border-slate-700 bg-slate-800 text-white text-sm h-9"
+              onKeyDown={(e) => e.key === "Enter" && addField()}
+            />
+          </div>
+          <div className="w-32">
+            <Label className="text-xs text-slate-400">Tipo</Label>
+            <Select value={newFieldType} onValueChange={(v) => setNewFieldType(v as "text" | "number" | "boolean")}>
+              <SelectTrigger className="border-slate-700 bg-slate-800 text-sm h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-slate-700 bg-slate-800">
+                <SelectItem value="text">Texto</SelectItem>
+                <SelectItem value="number">Numero</SelectItem>
+                <SelectItem value="boolean">Sim/Nao</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button onClick={addField} size="sm" className="h-9 bg-indigo-600 hover:bg-indigo-500" disabled={!newFieldKey.trim()}>
+            <Plus className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Save */}
+        <div className="flex items-center justify-between pt-2">
+          <p className="text-[10px] text-slate-600">
+            {dbPrompt?.updated_at
+              ? `Atualizado: ${new Date(dbPrompt.updated_at).toLocaleString("pt-BR")}`
+              : "Nao configurado"}
+          </p>
+          <Button
+            onClick={() => onSave(buildSchema())}
+            disabled={saving === "OUTPUT_SCHEMA" || !hasChanges}
+            size="sm"
+            className="bg-indigo-600 hover:bg-indigo-500"
+          >
+            {saving === "OUTPUT_SCHEMA" ? (
+              <RefreshCw className="mr-1 h-3 w-3 animate-spin" />
+            ) : (
+              <Save className="mr-1 h-3 w-3" />
+            )}
+            Salvar Campos
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function ConfiguracoesPage() {
   const [buscaConfigs, setBuscaConfigs] = useState<SearchConfig[]>([]);
   const [keywords, setKeywords] = useState<Keyword[]>([]);
@@ -551,7 +731,7 @@ export default function ConfiguracoesPage() {
 
         {/* Prompts IA Tab */}
         <TabsContent value="prompts" className="space-y-4">
-          {(["PRE_TRIAGEM", "ANALISE_COMPLETA", "OUTPUT_SCHEMA"] as const).map((type) => {
+          {(["PRE_TRIAGEM", "ANALISE_COMPLETA"] as const).map((type) => {
             const meta = PROMPT_LABELS[type];
             const dbPrompt = prompts.find((p) => p.prompt_type === type);
             const hasChanges = editingPrompts[type] !== (dbPrompt?.content || "");
@@ -596,6 +776,22 @@ export default function ConfiguracoesPage() {
               </Card>
             );
           })}
+
+          {/* OUTPUT_SCHEMA - Form-based editor */}
+          <OutputSchemaEditor
+            prompts={prompts}
+            saving={saving}
+            onSave={async (content: string) => {
+              setSaving("OUTPUT_SCHEMA");
+              await fetch("/api/configuracoes", {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ prompt_type: "OUTPUT_SCHEMA", content }),
+              });
+              await fetchAll();
+              setSaving(null);
+            }}
+          />
         </TabsContent>
 
         {/* Search Config Tab */}
