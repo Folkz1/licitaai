@@ -209,6 +209,7 @@ export default function LicitacoesPage() {
     uf: "",
     search: "",
     priority: "",
+    deadlineUntil: "",
   });
   const [showFilters, setShowFilters] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -222,6 +223,7 @@ export default function LicitacoesPage() {
       if (filters.uf) params.set("uf", filters.uf);
       if (filters.search) params.set("search", filters.search);
       if (filters.priority) params.set("priority", filters.priority);
+      if (filters.deadlineUntil) params.set("deadline_until", filters.deadlineUntil);
 
       try {
         const res = await fetch(`/api/licitacoes?${params}`);
@@ -253,6 +255,7 @@ export default function LicitacoesPage() {
     filters.phase,
     filters.uf,
     filters.priority,
+    filters.deadlineUntil,
   ].filter(Boolean).length;
 
   return (
@@ -364,6 +367,21 @@ export default function LicitacoesPage() {
               ))}
             </SelectContent>
           </Select>
+          <div className="flex items-center gap-2">
+            <Calendar className="h-3.5 w-3.5 text-slate-500" />
+            <Input
+              type="date"
+              value={filters.deadlineUntil}
+              onChange={(e) =>
+                setFilters((f) => ({ ...f, deadlineUntil: e.target.value }))
+              }
+              placeholder="Encerramento ate"
+              className="w-44 border-slate-700/50 bg-slate-800/50 text-sm h-9"
+            />
+            {filters.deadlineUntil && (
+              <span className="text-[11px] text-slate-400">ate {new Date(filters.deadlineUntil + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+            )}
+          </div>
           {activeFilterCount > 0 && (
             <Button
               variant="ghost"
@@ -375,6 +393,7 @@ export default function LicitacoesPage() {
                   uf: "",
                   search: filters.search,
                   priority: "",
+                  deadlineUntil: "",
                 })
               }
               className="text-slate-400 hover:text-white text-xs"

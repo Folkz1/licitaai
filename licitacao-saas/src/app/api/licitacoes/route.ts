@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
   const uf = searchParams.get("uf");
   const priority = searchParams.get("priority");
   const search = searchParams.get("search");
+  const deadlineUntil = searchParams.get("deadline_until");
 
   let whereClause = "WHERE l.tenant_id = $1";
   const params: unknown[] = [tenantId];
@@ -52,6 +53,12 @@ export async function GET(req: NextRequest) {
     paramCount++;
     whereClause += ` AND (l.objeto_compra ILIKE $${paramCount} OR l.orgao_nome ILIKE $${paramCount})`;
     params.push(`%${search}%`);
+  }
+
+  if (deadlineUntil) {
+    paramCount++;
+    whereClause += ` AND l.data_encerramento_proposta <= $${paramCount}`;
+    params.push(deadlineUntil);
   }
 
   const [rows, countResult] = await Promise.all([

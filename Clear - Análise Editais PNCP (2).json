@@ -1,0 +1,1590 @@
+{
+  "name": "Clear - Análise Editais PNCP",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "000bd63e-8ead-4ad8-addd-147c957d73ca",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -10624,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analise-editais",
+        "options": {}
+      },
+      "id": "c3c1ac8d-5b88-4b01-a295-52e62ce45910",
+      "name": "Webhook Analise Editais",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -10640,
+        1120
+      ],
+      "webhookId": "analise-editais-webhook-id"
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={\n  \"tenant_id\": \"{{ $json.body.tenant_id|| '00000000-0000-0000-0000-000000000001' }}\",\n  \"execution_id\": {{ $json.body.execution_id ? '\"' + $json.body.execution_id + '\"' : 'null' }},\n  \"tenant_nome\": \"{{ $json.tenant_nome || 'Clear' }}\",\n  \"inicio_execucao\": \"{{ $now.toISO() }}\",\n  \"max_licitacoes\": {{ $json.max_licitacoes || 50 }}\n}",
+        "options": {}
+      },
+      "id": "9c14eed8-fd22-4a66-bd86-7946454369f3",
+      "name": "Config Tenant",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -10352,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.execution_id ? \"UPDATE workflow_executions SET status = 'RUNNING', started_at = NOW(), current_step = 'Iniciando análise de editais...', logs = '[]'::jsonb WHERE id = '\" + $json.execution_id + \"' RETURNING id as execution_id\" : \"INSERT INTO workflow_executions (tenant_id, workflow_type, status, started_at, current_step, logs, metrics) VALUES ('\" + $json.tenant_id + \"', 'analise', 'RUNNING', NOW(), 'Iniciando análise de editais...', '[]'::jsonb, '{}'::jsonb) RETURNING id as execution_id\" }}",
+        "options": {}
+      },
+      "id": "a479476d-10be-48de-8a4e-80e861c936fc",
+      "name": "Start Execution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -10192,
+        1040
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE workflow_executions \nSET \n  current_step = 'Analisando edital: {{ $json.numero_controle_pncp }}',\n  logs = logs || jsonb_build_object('time', NOW(), 'message', 'Processando edital {{ $json.numero_controle_pncp }}', 'level', 'info')\nWHERE id = '{{ $('Start Execution').item.json.execution_id }}'",
+        "options": {}
+      },
+      "id": "fd792c83-a6b3-4488-a8ed-bd91c9e32e7d",
+      "name": "Update Progress",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -9056,
+        352
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE workflow_executions \nSET \n  status = 'SUCCESS',\n  finished_at = NOW(),\n  progress = 100,\n  current_step = 'Análise concluída com sucesso',\n  logs = logs || jsonb_build_object('time', NOW(), 'message', 'Workflow finalizado com sucesso', 'level', 'info')\nWHERE id = '{{ $('Start Execution').item.json.execution_id }}'",
+        "options": {}
+      },
+      "id": "50a4fa8e-bfd6-4fc2-b524-ce3297eb4da5",
+      "name": "Finish Execution",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -8912,
+        112
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  t.id as tenant_id,\n  t.nome as tenant_nome,\n  t.segmento,\n  t.config,\n  array_agg(DISTINCT CASE WHEN pc.tipo = 'INCLUSAO' THEN pc.palavra END) FILTER (WHERE pc.tipo = 'INCLUSAO') as palavras_inclusao,\n  array_agg(DISTINCT CASE WHEN pc.tipo = 'EXCLUSAO' THEN pc.palavra END) FILTER (WHERE pc.tipo = 'EXCLUSAO') as palavras_exclusao,\n  (SELECT content FROM custom_prompts WHERE tenant_id = t.id AND prompt_type = 'PRE_TRIAGEM' AND is_active = true LIMIT 1) as prompt_pre_triagem,\n  (SELECT content FROM custom_prompts WHERE tenant_id = t.id AND prompt_type = 'ANALISE_COMPLETA' AND is_active = true LIMIT 1) as prompt_analise_completa,\n  (SELECT content FROM custom_prompts WHERE tenant_id = t.id AND prompt_type = 'OUTPUT_SCHEMA' AND is_active = true LIMIT 1) as output_schema\nFROM tenants t\nLEFT JOIN palavras_chave pc ON pc.tenant_id = t.id AND pc.ativa = TRUE\nWHERE t.id = '{{ $('Webhook Analise Editais').item.json.body.tenant_id }}'\nGROUP BY t.id, t.nome, t.segmento, t.config",
+        "options": {}
+      },
+      "id": "5450bae0-4f98-4fa6-826e-4dddb0d44595",
+      "name": "Buscar Contexto Empresa",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -10016,
+        1024
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n  l.id,\n  l.numero_controle_pncp,\n  l.cnpj_orgao,\n  l.orgao_nome,\n  l.objeto_compra,\n  l.valor_total_estimado,\n  l.modalidade_contratacao,\n  l.tipo_participacao,\n  l.uf,\n  l.municipio,\n  l.data_publicacao,\n  l.data_encerramento_proposta,\n  l.link_sistema_origem,\n  EXTRACT(DAY FROM (l.data_encerramento_proposta - NOW())) as dias_restantes\nFROM vw_licitacoes_pendentes l\nWHERE l.tenant_id = '{{ $('Config Tenant').first().json.tenant_id }}'\nORDER BY l.data_encerramento_proposta ASC\nLIMIT {{ $('Config Tenant').first().json.max_licitacoes }}",
+        "options": {}
+      },
+      "id": "16278156-4be7-4933-b1c0-e643277264ca",
+      "name": "Select Licitações Pendentes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -9872,
+        1024
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "aec11e7f-b888-48cd-93ce-7fdc73c87be5",
+      "name": "Loop Licitações",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -9280,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Construir URL para buscar arquivos do edital na API PNCP\n// URL CORRETA: https://pncp.gov.br/pncp-api/v1/orgaos/{cnpj}/compras/{ano}/{sequencial}/arquivos/{1-10}\nconst moment = require('moment');\n\nconst licitacao = $('Loop Licitações').first().json;\nconst contexto = $('Buscar Contexto Empresa').first().json;\n\n// USAR CAMPOS DO BANCO SE DISPONÍVEIS, senão fazer parse\nlet cnpj = licitacao.cnpj_orgao;\nlet ano = licitacao.ano_compra;\nlet sequencial = licitacao.sequencial_compra;\n\n// FALLBACK: Se não temos ano_compra ou sequencial_compra, extrair do numero_controle_pncp\n// Formato: \"00394452000103-1-000034/2025\"\n// - CNPJ: 00394452000103\n// - Tipo: 1\n// - Sequencial: 000034 (remover zeros = 34)\n// - Ano: 2025\nif (!ano || !sequencial) {\n  const controle = licitacao.numero_controle_pncp;\n  if (controle && controle.includes('/')) {\n    // Separar por '/' para pegar o ano\n    const [parteEsquerda, anoParte] = controle.split('/');\n    ano = parseInt(anoParte, 10);\n    \n    // Separar a parte esquerda por '-'\n    const partes = parteEsquerda.split('-');\n    \n    // O sequencial é a ÚLTIMA parte (ex: '000034')\n    // Precisa converter para número para remover zeros à esquerda\n    const seqRaw = partes[partes.length - 1];\n    sequencial = parseInt(seqRaw, 10);\n    \n    console.log(`[DEBUG] Parseado do numero_controle_pncp:`);\n    console.log(`  - controle: ${controle}`);\n    console.log(`  - ano: ${ano}`);\n    console.log(`  - sequencial: ${sequencial} (raw: ${seqRaw})`);\n  }\n}\n\n// Validar se temos os campos necessários\nif (!cnpj || !ano || !sequencial) {\n  throw new Error(`Campos obrigatórios faltando: cnpj=${cnpj}, ano=${ano}, sequencial=${sequencial}. numero_controle_pncp=${licitacao.numero_controle_pncp}`);\n}\n\n// Construir URL da API PNCP para arquivos\n// IMPORTANTE: Usar /pncp-api/ não /api/pncp/\nconst urlBase = `https://pncp.gov.br/pncp-api/v1/orgaos/${cnpj}/compras/${ano}/${sequencial}/arquivos`;\n\n// Gerar URLs para todos os possíveis arquivos (1 a 10)\nconst urlsArquivos = [];\nfor (let i = 1; i <= 10; i++) {\n  urlsArquivos.push(`${urlBase}/${i}`);\n}\n\n// Calcular dias restantes\nconst diasRestantes = licitacao.dias_restantes || \n  moment(licitacao.data_encerramento_proposta).diff(moment(), 'days');\n\nconsole.log(`[INFO] URL gerada: ${urlsArquivos[0]}`);\n\nreturn [{\n  json: {\n    ...licitacao,\n    url_base_arquivos: urlBase,\n    urls_arquivos: urlsArquivos,\n    ano_compra_usado: ano,\n    sequencial_compra_usado: sequencial,\n    dias_restantes: diasRestantes,\n    contexto_empresa: {\n      tenant_nome: contexto.tenant_nome,\n      segmento: contexto.segmento,\n      config: contexto.config,\n      palavras_inclusao: contexto.palavras_inclusao || [],\n      palavras_exclusao: contexto.palavras_exclusao || []\n    }\n  }\n}];"
+      },
+      "id": "d6092c10-48c9-498a-a949-cb7bafda8baa",
+      "name": "Construir URL Edital",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8880,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url_base_arquivos }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "3756c4ae-77e9-4806-bc87-098a092282e5",
+      "name": "Listar Arquivos PNCP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -8656,
+        288
+      ],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar TODOS os arquivos para envio ao OCR Supremo\n// IMPORTANTE: O n8n transforma arrays JSON em múltiplos items, então usamos $input.all()\nconst licitacao = $('Construir URL Edital').first().json;\n\n// Reconstituir o array de arquivos a partir dos items do n8n\nconst inputItems = $input.all();\nconst arquivos = inputItems.map(item => item.json);\n\n// Se não retornou items ou o primeiro item tem erro, houve erro na chamada\nif (arquivos.length === 0) {\n  return [{\n    json: {\n      ...licitacao,\n      erro_download: true,\n      motivo_erro: 'Nenhum arquivo retornado pela API PNCP',\n      arquivo_url: null,\n      documents: []\n    }\n  }];\n}\n\n// Se o primeiro item tem propriedade 'error' ou 'message', é erro da API\nif (arquivos[0].error || arquivos[0].message) {\n  return [{\n    json: {\n      ...licitacao,\n      erro_download: true,\n      motivo_erro: arquivos[0].message || arquivos[0].error || 'Erro desconhecido da API',\n      arquivo_url: null,\n      documents: []\n    }\n  }];\n}\n\n// Logar arquivos encontrados\nconsole.log(`[INFO] Encontrados ${arquivos.length} arquivos para OCR:`);\n\n// Preparar array de documents para o OCR Supremo\n// Filtrar apenas arquivos ativos e com URL válida\nconst documents = arquivos\n  .filter(a => a.statusAtivo !== false && (a.url || a.uri))\n  .map((a, idx) => {\n    const url = a.url || a.uri;\n    const nome = a.titulo || a.nomeArquivo || `arquivo_${idx+1}.pdf`;\n    console.log(`  ${idx+1}. ${nome} (tipo: ${a.tipoDocumentoNome || 'N/A'})`);\n    return {\n      url: url,\n      id: `${licitacao.id}_doc${a.sequencialDocumento || idx+1}`,\n      nome: nome,\n      tipo: a.tipoDocumentoNome || 'Documento'\n    };\n  });\n\n// Identificar o arquivo principal (Termo de Referência ou primeiro PDF)\nlet arquivoPrincipal = arquivos.find(a => a.tipoDocumentoId === 4);\nif (!arquivoPrincipal) {\n  arquivoPrincipal = arquivos.find(a => a.titulo?.toLowerCase().endsWith('.pdf'));\n}\nif (!arquivoPrincipal) {\n  arquivoPrincipal = arquivos[0];\n}\n\nconsole.log(`[INFO] Arquivo principal: ${arquivoPrincipal.titulo || 'N/A'}`);\nconsole.log(`[INFO] Total de ${documents.length} documentos serão enviados ao OCR`);\n\nreturn [{\n  json: {\n    ...licitacao,\n    arquivo_nome: arquivoPrincipal.titulo || arquivoPrincipal.nomeArquivo || 'edital.pdf',\n    arquivo_url: arquivoPrincipal.url || arquivoPrincipal.uri,\n    arquivo_metadata: arquivoPrincipal,\n    erro_download: false,\n    total_arquivos_encontrados: arquivos.length,\n    documents: documents\n  }\n}];"
+      },
+      "id": "886628d3-a662-4130-a08c-39d838af75a4",
+      "name": "Preparar Documentos OCR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8432,
+        288
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-erro",
+              "leftValue": "={{ $json.erro_download }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1df8bd9f-3d36-4f0b-9a6e-ea15e6292cf9",
+      "name": "Tem Arquivo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -8208,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/ocr-supremo",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ documents: $json.documents }) }}",
+        "options": {}
+      },
+      "id": "579ad1b6-81a2-48f7-b516-1ba50dd8867d",
+      "name": "Webhook OCR Supremo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -7984,
+        160
+      ],
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processar resposta do OCR Supremo e preparar para análise IA\n// FORMATO ESPERADO: { data: [ { texto: '{\"content_type\":\"...\",\"content\":\"...\"}' }, ... ] }\nconst licitacao = $('Preparar Documentos OCR').first().json;\nconst ocrResponse = $input.first().json;\n\nlet conteudoTexto = '';\nlet ocrSucesso = false;\nlet ocrMetodo = 'OCR_SUPREMO';\nlet totalPaginas = 0;\nlet totalDocumentos = 0;\n\n// Função auxiliar para extrair texto de qualquer estrutura\nfunction extrairTexto(obj) {\n  if (!obj) return '';\n  \n  // Se for string, retornar diretamente\n  if (typeof obj === 'string') {\n    // Tentar parsear como JSON\n    try {\n      const parsed = JSON.parse(obj);\n      return extrairTexto(parsed);\n    } catch (e) {\n      return obj;\n    }\n  }\n  \n  // Se for array, processar cada item\n  if (Array.isArray(obj)) {\n    return obj.map(item => extrairTexto(item)).filter(t => t).join('\\n\\n');\n  }\n  \n  // Se for objeto, procurar campos conhecidos\n  if (typeof obj === 'object') {\n    // Prioridade dos campos para extração de texto\n    const camposTexto = ['content', 'texto', 'text', 'pagina', 'page', 'body', 'resultado', 'result'];\n    \n    for (const campo of camposTexto) {\n      if (obj[campo]) {\n        const texto = extrairTexto(obj[campo]);\n        if (texto && texto.length > 10) {\n          return texto;\n        }\n      }\n    }\n    \n    // Se tiver campo 'data' como array, processar\n    if (obj.data && Array.isArray(obj.data)) {\n      return obj.data.map(item => extrairTexto(item)).filter(t => t).join('\\n\\n---\\n\\n');\n    }\n    \n    // Se tiver campo 'pages' ou 'paginas' como array\n    if (obj.pages && Array.isArray(obj.pages)) {\n      return obj.pages.map(item => extrairTexto(item)).filter(t => t).join('\\n\\n');\n    }\n    if (obj.paginas && Array.isArray(obj.paginas)) {\n      return obj.paginas.map(item => extrairTexto(item)).filter(t => t).join('\\n\\n');\n    }\n  }\n  \n  return '';\n}\n\n// Função para contar páginas/documentos\nfunction contarItens(obj) {\n  let docs = 0;\n  let pags = 0;\n  \n  if (obj && obj.data && Array.isArray(obj.data)) {\n    docs = obj.data.length;\n    for (const doc of obj.data) {\n      if (doc.texto) {\n        try {\n          const parsed = typeof doc.texto === 'string' ? JSON.parse(doc.texto) : doc.texto;\n          if (Array.isArray(parsed)) {\n            pags += parsed.length;\n          } else {\n            pags += 1;\n          }\n        } catch (e) {\n          pags += 1;\n        }\n      }\n    }\n  }\n  \n  return { docs, pags };\n}\n\ntry {\n  console.log('[OCR] Iniciando processamento...');\n  console.log('[OCR] Tipo de resposta:', typeof ocrResponse);\n  \n  // Tentar extrair o texto de forma recursiva\n  conteudoTexto = extrairTexto(ocrResponse);\n  \n  // Contar itens\n  const contagem = contarItens(ocrResponse);\n  totalDocumentos = contagem.docs;\n  totalPaginas = contagem.pags || 1;\n  \n  // Limpar caracteres de escape extras e normalizar quebras de linha\n  conteudoTexto = conteudoTexto\n    .replace(/\\\\n/g, '\\n')\n    .replace(/\\\\r/g, '')\n    .replace(/\\\\t/g, '\\t')\n    .replace(/\\\\\\\\/g, '\\\\')\n    .replace(/\\\\\"/g, '\"')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n  \n  ocrSucesso = conteudoTexto.length > 100;\n  \n  console.log(`[OCR] Extraídos ${totalDocumentos} docs, ${totalPaginas} páginas, ${conteudoTexto.length} chars`);\n  \n  // Se não conseguiu extrair, tentar stringify como último recurso\n  if (!ocrSucesso) {\n    console.log('[OCR] Tentando fallback com stringify...');\n    conteudoTexto = JSON.stringify(ocrResponse, null, 2);\n    ocrSucesso = conteudoTexto.length > 100;\n  }\n  \n} catch (e) {\n  console.log(`[OCR] Erro ao processar: ${e.message}`);\n  conteudoTexto = JSON.stringify(ocrResponse, null, 2);\n}\n\n// Limitar tamanho do texto para evitar tokens excessivos na IA\n// Mant?m cabe?a+cauda para preservar itens/prazos que geralmente ficam no final do edital.\nconst MAX_CHARS = 180000;\nconst HEAD_CHARS = 90000;\nconst TAIL_CHARS = 90000;\nif (conteudoTexto.length > MAX_CHARS) {\n  conteudoTexto =\n    conteudoTexto.substring(0, HEAD_CHARS) +\n    '[TEXTO TRUNCADO - EDITAL MUITO GRANDE]' +\n    conteudoTexto.substring(conteudoTexto.length - TAIL_CHARS);\n}\n\nreturn [{\n  json: {\n    ...licitacao,\n    conteudo_texto: conteudoTexto,\n    ocr_sucesso: ocrSucesso,\n    ocr_metodo: ocrMetodo,\n    texto_chars: conteudoTexto.length,\n    total_paginas: totalPaginas,\n    total_documentos: totalDocumentos\n  }\n}];"
+      },
+      "id": "47192360-7dbf-414a-984b-8fadcbb24161",
+      "name": "Processar Resultado OCR",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7760,
+        160
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO editais (licitacao_id, arquivo_url, arquivo_nome, conteudo_texto, ocr_sucesso, ocr_metodo, tamanho_bytes)\nVALUES (\n  '{{ $json.id }}',\n  '{{ $json.arquivo_url }}',\n  '{{ $json.arquivo_nome }}',\n  {{ $json.conteudo_texto ? \"'\" + $json.conteudo_texto.replace(/'/g, \"''\") + \"'\" : 'NULL' }},\n  {{ $json.ocr_sucesso }},\n  '{{ $json.ocr_metodo }}',\n  {{ $json.texto_chars || 0 }}\n)\nON CONFLICT (licitacao_id) DO UPDATE SET\n  arquivo_url = EXCLUDED.arquivo_url,\n  arquivo_nome = EXCLUDED.arquivo_nome,\n  conteudo_texto = EXCLUDED.conteudo_texto,\n  ocr_sucesso = EXCLUDED.ocr_sucesso,\n  ocr_metodo = EXCLUDED.ocr_metodo,\n  tamanho_bytes = EXCLUDED.tamanho_bytes,\n  updated_at = NOW()\nRETURNING id",
+        "options": {}
+      },
+      "id": "3f894247-effc-4284-a848-25b7af2d5feb",
+      "name": "Gravar Edital",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -7536,
+        160
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-ocr",
+              "leftValue": "={{ $('Processar Resultado OCR').first().json.ocr_sucesso }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2037cc37-5d4f-475f-bdb8-38d1d3928f35",
+      "name": "OCR Sucesso?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -7312,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processar resposta da IA e gravar itens e análise (com validação/normalização)\nconst licitacao = $('Processar Resultado OCR').first().json;\nconst iaResponse = $input.first().json;\n\n// Extrair output da IA\nconst output = iaResponse.output || iaResponse || {};\n\nconst parseNumber = (value) => {\n  if (value === null || value === undefined) return null;\n  if (typeof value === 'number') return Number.isFinite(value) ? value : null;\n  const raw = String(value).trim();\n  if (!raw) return null;\n  let s = raw.replace(/R\\$|\\s/g, '');\n  // Se tiver '.' e ',', assume padrão pt-BR (milhar '.' e decimal ',')\n  if (s.includes('.') && s.includes(',')) {\n    s = s.replace(/\\./g, '').replace(',', '.');\n  } else if (s.includes(',')) {\n    s = s.replace(',', '.');\n  }\n  s = s.replace(/[^0-9.\\-]/g, '');\n  const n = Number(s);\n  return Number.isFinite(n) ? n : null;\n};\n\nconst parseIntSafe = (value) => {\n  const n = parseNumber(value);\n  if (n === null) return null;\n  return Math.trunc(n);\n};\n\n// Campos base\nconst resumo = output.resumo || {};\nconst analise = output.analise || {};\nconst documentos_necessarios = output.documentos_necessarios || [];\nconst prazos_importantes = output.prazos_importantes || {};\nconst requisitos_tecnicos = output.requisitos_tecnicos || [];\nconst analise_riscos = output.analise_riscos || [];\nconst preferencias_me_epp = output.preferencias_me_epp || {};\nconst garantias = output.garantias || {};\nconst forma_fornecimento = output.forma_fornecimento || {};\n\nconst amostra_exigida =\n  analise.amostra_exigida === true ? true :\n  analise.amostra_exigida === false ? false :\n  null;\n\nconst amostra_evidencia = analise.amostra_evidencia ? String(analise.amostra_evidencia).slice(0, 400) : null;\n\n// Normalizar itens\nconst itensRaw = Array.isArray(output.itens) ? output.itens : [];\nconst itens = itensRaw.map((item, idx) => {\n  const numero = parseIntSafe(item.numero) ?? (idx + 1);\n  const quantidade = parseNumber(item.quantidade) ?? 0;\n  const valor_unitario = parseNumber(item.valor_unitario) ?? 0;\n  let valor_total = parseNumber(item.valor_total);\n  if ((valor_total === null || valor_total === 0) && quantidade && valor_unitario) {\n    valor_total = quantidade * valor_unitario;\n  }\n\n  const e_produto_grafico = item.e_produto_grafico === true;\n  const item_exclusivo_me_epp =\n    item.item_exclusivo_me_epp === true ? true :\n    item.item_exclusivo_me_epp === false ? false :\n    null;\n\n  const evidencia = item.evidencia ? String(item.evidencia).slice(0, 400) : null;\n\n  return {\n    numero,\n    descricao: item.descricao ? String(item.descricao) : null,\n    quantidade,\n    unidade: item.unidade ? String(item.unidade) : 'UN',\n    valor_unitario,\n    valor_total: valor_total ?? 0,\n    e_produto_grafico,\n    tipo_produto: item.tipo_produto ? String(item.tipo_produto) : 'outro',\n    item_exclusivo_me_epp,\n    evidencia,\n    confianca: parseNumber(item.confianca) ?? 0\n  };\n});\n\n// Derivações confiáveis (não depender da IA)\nconst valor_total_licitacao =\n  parseNumber(resumo.valor_total_licitacao) ??\n  parseNumber(licitacao.valor_total_estimado) ??\n  0;\n\nconst valor_itens_relevantes = itens\n  .filter(i => i.e_produto_grafico)\n  .reduce((acc, i) => acc + (parseNumber(i.valor_total) ?? 0), 0);\n\nconst percentual_relevante =\n  valor_total_licitacao > 0 ? Math.round((valor_itens_relevantes / valor_total_licitacao) * 100) : 0;\n\nconst dataRealizacao =\n  resumo.data_realizacao_certame ||\n  prazos_importantes.data_realizacao_certame ||\n  null;\n\n// Garantir a chave em ambos os lugares (para UI e compatibilidade)\nresumo.data_realizacao_certame = dataRealizacao || null;\nif (!prazos_importantes.data_realizacao_certame) {\n  prazos_importantes.data_realizacao_certame = dataRealizacao || null;\n}\n\n// Retornar dados processados\nreturn [{\n  json: {\n    licitacao_id: licitacao.id,\n    tenant_id: licitacao.contexto_empresa?.tenant_id || $('Config Tenant').first().json.tenant_id,\n\n    // Itens para inserção em itens_licitacao\n    itens,\n\n    // Resumo calculado\n    total_itens: itens.length,\n    itens_graficos: itens.filter(i => i.e_produto_grafico).length,\n    valor_total_licitacao,\n    valor_itens_relevantes,\n    percentual_relevante,\n\n    // Dados da análise\n    prioridade: analise.prioridade || 'P3',\n    justificativa: analise.justificativa || 'Análise automática',\n    pontos_positivos: analise.pontos_positivos || [],\n    pontos_atencao: analise.pontos_atencao || [],\n    recomendacao: analise.recomendacao || 'Avaliar manualmente',\n    amostra_exigida,\n    amostra_evidencia,\n\n    // Campos extraídos\n    documentos_necessarios,\n    prazos_importantes,\n    requisitos_tecnicos,\n    analise_riscos,\n\n    // Campos estratégicos\n    preferencias_me_epp,\n    garantias,\n    forma_fornecimento,\n\n    // Contexto\n    orgao_nome: licitacao.orgao_nome,\n    uf: licitacao.uf,\n    objeto_compra: licitacao.objeto_compra,\n    dias_restantes: licitacao.dias_restantes,\n\n    // Campos customizados por tenant\n    campos_customizados: output.campos_customizados || {},\n\n    // Resposta completa (debug/auditoria)\n    ia_response_raw: output\n  }\n}];"
+      },
+      "id": "16c29afb-6701-40e1-a580-ef7f79bb7f35",
+      "name": "Processar Resposta IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4272,
+        288
+      ],
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ \n  $json.itens && $json.itens.length > 0\n    ? 'INSERT INTO itens_licitacao (licitacao_id, numero_item, descricao, quantidade, unidade, valor_unitario, valor_total, e_produto_grafico, tipo_produto, confianca_classificacao, item_exclusivo_me_epp, evidencia) VALUES ' +\n      $json.itens.map((item, idx) => {\n        const conf01 = Math.round(((item.confianca || 0) / 100) * 100) / 100; // 0.00–1.00\n        return \"('\" + $json.licitacao_id + \"', \" +\n          (item.numero || idx + 1) + \", '\" +\n          (item.descricao || '').replace(/'/g, \"''\") + \"', \" +\n          (item.quantidade || 0) + \", '\" +\n          (item.unidade || 'UN') + \"', \" +\n          (item.valor_unitario || 0) + \", \" +\n          (item.valor_total || 0) + \", \" +\n          (item.e_produto_grafico ? 'TRUE' : 'FALSE') + \", '\" +\n          (item.tipo_produto || 'outro') + \"', \" +\n          conf01 + \", \" +\n          (item.item_exclusivo_me_epp === true\n            ? 'TRUE'\n            : (item.item_exclusivo_me_epp === false ? 'FALSE' : 'NULL')) + \", \" +\n          (item.evidencia\n            ? (\"'\" + String(item.evidencia).replace(/'/g, \"''\") + \"'\")\n            : 'NULL') +\n        \")\";\n      }).join(', ') +\n      ' ON CONFLICT (licitacao_id, numero_item) DO UPDATE SET descricao = EXCLUDED.descricao, quantidade = EXCLUDED.quantidade, unidade = EXCLUDED.unidade, valor_unitario = EXCLUDED.valor_unitario, valor_total = EXCLUDED.valor_total, e_produto_grafico = EXCLUDED.e_produto_grafico, tipo_produto = EXCLUDED.tipo_produto, confianca_classificacao = EXCLUDED.confianca_classificacao, item_exclusivo_me_epp = EXCLUDED.item_exclusivo_me_epp, evidencia = EXCLUDED.evidencia RETURNING id'\n    : 'SELECT 1 as dummy'\n}}\n",
+        "options": {}
+      },
+      "id": "f2e2f787-189a-47d5-96b5-cabbe0b3eb17",
+      "name": "Gravar Itens",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -4048,
+        288
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ (() => {\n  const data = $('Processar Resposta IA').first().json;\n  let prioridade = data.prioridade || 'P3';\n  let tipoOportunidade = 'AVALIAR';\n\n  if (prioridade === 'REJEITAR') {\n    prioridade = 'P3';\n    tipoOportunidade = 'REJEITAR';\n  } else if (['P1', 'P2'].includes(prioridade)) {\n    tipoOportunidade = 'PARTICIPAR';\n  }\n\n  if (!['P1', 'P2', 'P3'].includes(prioridade)) {\n    prioridade = 'P3';\n  }\n\n  const justificativa = (data.justificativa || '').replace(/'/g, \"''\");\n  const itensJson = JSON.stringify(data.ia_response_raw || {}).replace(/'/g, \"''\");\n  const docsJson = JSON.stringify(data.documentos_necessarios || []).replace(/'/g, \"''\");\n  const prazosJson = JSON.stringify(data.prazos_importantes || {}).replace(/'/g, \"''\");\n  const reqTecJson = JSON.stringify(data.requisitos_tecnicos || []).replace(/'/g, \"''\");\n  const riscosJson = JSON.stringify(data.analise_riscos || []).replace(/'/g, \"''\");\n  const meEppJson = JSON.stringify(data.preferencias_me_epp || {}).replace(/'/g, \"''\");\n  const garantiasJson = JSON.stringify(data.garantias || {}).replace(/'/g, \"''\");\n  const fornecimentoJson = JSON.stringify(data.forma_fornecimento || {}).replace(/'/g, \"''\");\n\n  const amostraExigidaSql =\n    data.amostra_exigida === true ? 'TRUE' :\n    data.amostra_exigida === false ? 'FALSE' :\n    'NULL';\n\n  const amostraEvidenciaSql =\n    data.amostra_evidencia ? (\"'\" + String(data.amostra_evidencia).replace(/'/g, \"''\") + \"'\") : 'NULL';\n\n  const camposCustomJson = JSON.stringify(data.campos_customizados || {}).replace(/'/g, \"''\");\n\n  return \"INSERT INTO analises (licitacao_id, prioridade, tipo_oportunidade, score_relevancia, justificativa, valor_itens_relevantes, itens_relevantes, documentos_necessarios, prazos, requisitos_tecnicos, analise_riscos, preferencias_me_epp, garantias, forma_fornecimento, amostra_exigida, amostra_evidencia, campos_customizados) VALUES ('\" + data.licitacao_id + \"', '\" + prioridade + \"', '\" + tipoOportunidade + \"', \" + (data.percentual_relevante || 0) + \", '\" + justificativa + \"', \" + (data.valor_itens_relevantes || 0) + \", '\" + itensJson + \"', '\" + docsJson + \"', '\" + prazosJson + \"', '\" + reqTecJson + \"', '\" + riscosJson + \"', '\" + meEppJson + \"', '\" + garantiasJson + \"', '\" + fornecimentoJson + \"', \" + amostraExigidaSql + \", \" + amostraEvidenciaSql + \", '\" + camposCustomJson + \"') ON CONFLICT (licitacao_id) DO UPDATE SET prioridade = EXCLUDED.prioridade, tipo_oportunidade = EXCLUDED.tipo_oportunidade, score_relevancia = EXCLUDED.score_relevancia, justificativa = EXCLUDED.justificativa, valor_itens_relevantes = EXCLUDED.valor_itens_relevantes, itens_relevantes = EXCLUDED.itens_relevantes, documentos_necessarios = EXCLUDED.documentos_necessarios, prazos = EXCLUDED.prazos, requisitos_tecnicos = EXCLUDED.requisitos_tecnicos, analise_riscos = EXCLUDED.analise_riscos, preferencias_me_epp = EXCLUDED.preferencias_me_epp, garantias = EXCLUDED.garantias, forma_fornecimento = EXCLUDED.forma_fornecimento, amostra_exigida = EXCLUDED.amostra_exigida, amostra_evidencia = EXCLUDED.amostra_evidencia, campos_customizados = EXCLUDED.campos_customizados, updated_at = NOW() RETURNING id\";\n})() }}",
+        "options": {}
+      },
+      "id": "6392f484-c9a4-40e7-a523-94db351af1f4",
+      "name": "Gravar Análise",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -3824,
+        288
+      ],
+      "alwaysOutputData": true,
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE licitacoes \nSET \n  status = 'ANALISADA',\n  updated_at = NOW()\nWHERE id = '{{ $('Processar Resposta IA').first().json.licitacao_id }}'\nRETURNING id, status",
+        "options": {}
+      },
+      "id": "b9d0276b-8127-4cc9-bdb8-ff447e54aa20",
+      "name": "Update Status ANALISADA",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -3600,
+        288
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE licitacoes \nSET \n  status = 'ERRO_OCR',\n  motivo_filtro = 'Falha na extração de texto do edital',\n  updated_at = NOW()\nWHERE id = '{{ $('Processar Resultado OCR').first().json.id }}'\nRETURNING id, status",
+        "options": {}
+      },
+      "id": "d359fe29-9d92-454a-b109-314597abd132",
+      "name": "Marcar Erro OCR",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -3600,
+        32
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE licitacoes \nSET \n  status = 'SEM_EDITAL',\n  motivo_filtro = '{{ $json.motivo_erro || \"Arquivo do edital não encontrado\" }}',\n  updated_at = NOW()\nWHERE id = '{{ $json.id }}'\nRETURNING id, status",
+        "options": {}
+      },
+      "id": "cb11f437-7b76-4e6d-aeb1-f31a4e15c2b7",
+      "name": "Marcar Sem Edital",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -3600,
+        528
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "8bd84741-c4d6-406c-b27f-9b2dae2865a5",
+      "name": "Continua Loop",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -3376,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "3e9ff60f-16c0-41f8-9ff9-29af27282ce9",
+      "name": "Loop Pré-Triagem",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -9680,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Preparar dados para pré-triagem com IA\nconst licitacao = $input.first().json;\nconst contexto = $('Buscar Contexto Empresa').first().json;\n\nreturn [{\n  json: {\n    licitacao_id: licitacao.id,\n    numero_controle: licitacao.numero_controle_pncp,\n    objeto_compra: licitacao.objeto_compra,\n    orgao_nome: licitacao.orgao_nome,\n    valor_total: licitacao.valor_total_estimado,\n    modalidade: licitacao.modalidade_contratacao,\n    uf: licitacao.uf,\n    municipio: licitacao.municipio,\n    dias_restantes: licitacao.dias_restantes,\n    contexto_empresa: {\n      tenant_id: contexto.tenant_id,\n      tenant_nome: contexto.tenant_nome,\n      segmento: contexto.segmento,\n      palavras_inclusao: contexto.palavras_inclusao || [],\n      palavras_exclusao: contexto.palavras_exclusao || []\n    },\n    // Manter dados originais para próximos nós\n    _licitacao_original: licitacao\n  }\n}];"
+      },
+      "id": "cc3b0d98-e067-45d4-9c72-65d4313c3fc0",
+      "name": "Preparar Pré-Triagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -9456,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=## LICITAÇÃO PARA AVALIAR\n- Órgão: {{ $json.orgao_nome }}\n- Objeto: {{ $json.objeto_compra }}\n- Valor Estimado: R$ {{ $json.valor_total }}\n- Modalidade: {{ $json.modalidade }}\n- UF: {{ $json.uf }} - {{ $json.municipio }}\n{{ $('Buscar Contexto Empresa').item.json.prompt_pre_triagem }}\n",
+        "hasOutputParser": true
+      },
+      "id": "802a8fc2-a61e-443e-98ea-392adf6569ad",
+      "name": "IA Pré-Triagem",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        -9232,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"decisao\": \"ANALISAR\",\n  \"motivo\": \"Objeto menciona material de escritório que pode incluir papel\",\n  \"confianca\": 85\n}"
+      },
+      "id": "83b1aaa8-e22a-49dc-92ec-48c2061d5b9a",
+      "name": "Output Parser Pré-Triagem",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -9104,
+        1136
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Processar resultado da pré-triagem\nconst input = $input.first().json;\nconst preparacao = $('Preparar Pré-Triagem').first().json;\n\nlet decisao = 'REJEITAR';\nlet motivo = 'Erro ao processar resposta da IA';\nlet confianca = 0;\n\ntry {\n  // A resposta pode vir como objeto ou como string\n  if (typeof input === 'object') {\n    decisao = input.decisao || input.output?.decisao || 'REJEITAR';\n    motivo = input.motivo || input.output?.motivo || 'Sem justificativa';\n    confianca = input.confianca || input.output?.confianca || 0;\n  }\n} catch (e) {\n  console.log('Erro ao processar:', e.message);\n}\n\nconst deveAnalisar = decisao.toUpperCase() === 'ANALISAR';\n\nconsole.log(`[PRÉ-TRIAGEM] ${preparacao.numero_controle}: ${decisao} (${confianca}%) - ${motivo}`);\n\nreturn [{\n  json: {\n    ...preparacao._licitacao_original,\n    pre_triagem: {\n      decisao: decisao,\n      motivo: motivo,\n      confianca: confianca\n    },\n    deve_analisar: deveAnalisar,\n    contexto_empresa: preparacao.contexto_empresa\n  }\n}];"
+      },
+      "id": "a327f514-6221-4ef9-a440-be1b45a40bb7",
+      "name": "Processar Pré-Triagem",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8880,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "check-analisar",
+              "leftValue": "={{ $json.deve_analisar }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c8b1ebca-1a19-4e73-b74f-c757ccdbd583",
+      "name": "Relevante?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -8656,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ (() => {\n  const data = $json;\n  const motivo = (data.pre_triagem?.motivo || 'Rejeitado na pré-triagem').replace(/'/g, \"''\");\n  \n  return `INSERT INTO analises (licitacao_id, prioridade, tipo_oportunidade, score_relevancia, justificativa) \n    VALUES ('${data.id}', 'P3', 'PRE_TRIAGEM_REJEITAR', ${data.pre_triagem?.confianca || 0}, '${motivo}')\n    ON CONFLICT (licitacao_id) DO UPDATE SET \n      prioridade = 'P3',\n      tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR',\n      justificativa = EXCLUDED.justificativa,\n      updated_at = NOW()\n    RETURNING id`;\n})() }}",
+        "options": {}
+      },
+      "id": "7daf4d74-4e81-46bb-a256-50b5915012aa",
+      "name": "Gravar Rejeição Rápida",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -8448,
+        832
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE licitacoes SET status = 'ANALISADA' WHERE id = '{{ $json.id }}'",
+        "options": {}
+      },
+      "id": "0baf6ac7-34f4-45da-9b81-efa080c4c52a",
+      "name": "Marcar Rejeitada Pré-Triagem",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -8208,
+        816
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "8e90033b-9a1e-415b-9f6c-49d8c9ece3b2",
+      "name": "Continua Loop Pré-Triagem",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        -7984,
+        1040
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Coletar licitações aprovadas na pré-triagem para análise completa\nconst items = $('Relevante?').first().json;\n\n// Retornar como item para o próximo loop\nreturn [{ json: items }];"
+      },
+      "id": "78dc3a9d-1fd3-4970-bad5-570dc21a9190",
+      "name": "Coletar Para Análise",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -8432,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "4d6b6d93-fc12-48ea-8e2b-5265e0fd7e20",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": false,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -9552,
+        240
+      ],
+      "id": "04f1121c-d8f2-4a76-9df8-102c8bbdefc4",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3-flash-preview",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -9232,
+        1136
+      ],
+      "id": "01e69951-ef5f-4cef-bc16-ed945e91f366",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "tkayfIXKXwcUfEhh",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "google/gemini-3-pro-preview",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -4848,
+        464
+      ],
+      "id": "37ba4bdb-401a-409d-8825-996d26a5413d",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "tkayfIXKXwcUfEhh",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "=define",
+        "text": "=## CONTEXTO DA EMPRESA\nNome: {{ $('Preparar Documentos OCR').first().json.contexto_empresa.tenant_nome }}\nSegmento: {{ $('Preparar Documentos OCR').first().json.contexto_empresa.segmento || 'Gráfica e Papéis' }}\nFoco Geográfico: {{ $('Preparar Documentos OCR').first().json.contexto_empresa.config?.foco_uf || 'MG' }}\nRegra 80k: {{ $('Preparar Documentos OCR').first().json.contexto_empresa.config?.regra_80k ? 'Não participar de ME/EPP > R$80k' : 'Ignorar' }}\n\n## SERVIÇOS/PRODUTOS QUE A EMPRESA FORNECE\n{{ ($('Preparar Documentos OCR').first().json.contexto_empresa.palavras_inclusao || []).join(', ') }}\n\n## SERVIÇOS/PRODUTOS QUE A EMPRESA NÃO FORNECE\n{{ ($('Preparar Documentos OCR').first().json.contexto_empresa.palavras_exclusao || []).join(', ') }}\n\n## DADOS DA LICITAÇÃO\nObjeto: {{ $('Preparar Documentos OCR').first().json.objeto_compra }}\nUrgência: {{ $('Preparar Documentos OCR').first().json.dias_restantes }} dias restantes\nValor Estimado (PNCP): R$ {{ $('Preparar Documentos OCR').first().json.valor_total_estimado }}\n\n## CONTEXTO DO EDITAL (RAG - SOMENTE ESTA LICITAÇÃO)\nUse SOMENTE os trechos abaixo. Se faltar algo, retorne null/0/[].\n{{ $('RAG - Montar Contexto').first().json.contexto_rag }}\n\n{{ $('Buscar Contexto Empresa').item.json.prompt_analise_completa }}\n\n{{ $('Buscar Contexto Empresa').item.json.output_schema ? '## FORMATO DE SAÍDA JSON\\nResponda EXATAMENTE neste formato JSON. Inclua todos os campos, mesmo com null/0/[].\\nSe houver campo campos_customizados, preencha-os com dados extraídos do edital.\\n```json\\n' + $('Buscar Contexto Empresa').item.json.output_schema + '\\n```' : '' }}",
+        "hasOutputParser": true,
+        "batching": {}
+      },
+      "id": "6f6f5d06-8027-4b22-b051-5d2ee85d09ad",
+      "name": "AI Análise Completa",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -4848,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Code Node (JavaScript) — Normalizador de saída da IA\n * Entrada: item.json.text = string contendo JSON (às vezes com ```json)\n * Saída: [{ json: <objeto normalizado no schema> }]\n */\n\n// ---------------- Helpers básicos ----------------\nfunction isObject(x) {\n  return x && typeof x === \"object\" && !Array.isArray(x);\n}\n\nfunction getRawText(itemJson) {\n  if (typeof itemJson?.text === \"string\" && itemJson.text.trim()) return itemJson.text;\n  if (typeof itemJson === \"string\") return itemJson;\n  return null;\n}\n\nfunction stripCodeFences(s) {\n  return String(s)\n    .replace(/```json\\s*/gi, \"\")\n    .replace(/```\\s*/g, \"\")\n    .trim();\n}\n\nfunction normalizeWhitespace(s) {\n  // NBSP + normaliza quebras de linha, sem mexer em aspas tipográficas dentro de strings.\n  return String(s)\n    .replace(/\\u00A0/g, \" \")\n    .replace(/\\r\\n?/g, \"\\n\");\n}\n\nfunction extractJsonObjectSubstring(s) {\n  const start = s.indexOf(\"{\");\n  const end = s.lastIndexOf(\"}\");\n  if (start === -1 || end === -1 || end <= start) return null;\n  return s.slice(start, end + 1);\n}\n\nfunction removeTrailingCommas(s) {\n  return String(s).replace(/,\\s*([}\\]])/g, \"$1\");\n}\n\nfunction tryFixSingleQuotes(jsonLike) {\n  let s = String(jsonLike);\n  s = s.replace(/'([A-Za-z0-9_À-ÿ\\- ]+)'\\s*:/g, (_, key) => `\"${key}\":`);\n  s = s.replace(/:\\s*'([^'\\\\]*(?:\\\\.[^'\\\\]*)*)'\\s*([,}\\]])/g, (_m, val, tail) => {\n    const safe = String(val).replace(/\"/g, '\\\\\"');\n    return `: \"${safe}\"${tail}`;\n  });\n  return s;\n}\n\nfunction safeJsonParse(rawText) {\n  let s = String(rawText ?? \"\").trim();\n  if (!s) throw new Error(\"Texto vazio: não há JSON para parsear.\");\n\n  s = stripCodeFences(s);\n  s = normalizeWhitespace(s);\n\n  const extracted = extractJsonObjectSubstring(s);\n  if (extracted) s = extracted;\n\n  s = removeTrailingCommas(s);\n\n  try {\n    return JSON.parse(s);\n  } catch (e1) {\n    try {\n      const s2 = removeTrailingCommas(tryFixSingleQuotes(s));\n      return JSON.parse(s2);\n    } catch (e2) {\n      throw new Error(\n        `Falha ao parsear JSON.\\n1) ${e1.message}\\n2) ${e2.message}\\nTrecho: ${String(s).slice(0, 220)}`\n      );\n    }\n  }\n}\n\nfunction unwrapOutput(obj) {\n  // Se vier { output: {...} } ou { result: {...} } etc\n  let cur = obj;\n  const keys = [\"output\", \"result\", \"data\"];\n  for (let i = 0; i < 5; i++) {\n    if (!isObject(cur)) break;\n    let moved = false;\n    for (const k of keys) {\n      if (isObject(cur[k])) {\n        cur = cur[k];\n        moved = true;\n        break;\n      }\n    }\n    if (!moved) break;\n  }\n  return cur;\n}\n\nfunction toNumberBR(v) {\n  if (v === null || v === undefined) return null;\n  if (typeof v === \"number\" && Number.isFinite(v)) return v;\n  if (typeof v !== \"string\") return null;\n\n  let s = v.trim();\n  if (!s) return null;\n\n  s = s.replace(/R\\$\\s?/gi, \"\").replace(/\\s/g, \"\");\n\n  const hasDot = s.includes(\".\");\n  const hasComma = s.includes(\",\");\n  if (hasDot && hasComma) s = s.replace(/\\./g, \"\").replace(\",\", \".\");\n  else if (hasComma && !hasDot) s = s.replace(\",\", \".\");\n\n  s = s.replace(/[^0-9+\\-\\.]/g, \"\");\n  const n = Number(s);\n  return Number.isFinite(n) ? n : null;\n}\n\nfunction toInt(v) {\n  const n = toNumberBR(v);\n  if (n === null) return null;\n  const i = Math.trunc(n);\n  return Number.isFinite(i) ? i : null;\n}\n\nfunction toBoolOrNull(v) {\n  if (v === null || v === undefined) return null;\n  if (typeof v === \"boolean\") return v;\n  if (typeof v === \"number\") return v === 1 ? true : v === 0 ? false : null;\n  if (typeof v === \"string\") {\n    const s = v.trim().toLowerCase();\n    if ([\"true\", \"sim\", \"yes\", \"1\"].includes(s)) return true;\n    if ([\"false\", \"não\", \"nao\", \"no\", \"0\"].includes(s)) return false;\n  }\n  return null;\n}\n\nfunction normalizePriority(v) {\n  if (v === null || v === undefined) return null;\n  const s = String(v).trim().toUpperCase();\n  return [\"P1\", \"P2\", \"P3\", \"REJEITAR\"].includes(s) ? s : null;\n}\n\nfunction normalizeDateTime(v) {\n  if (!v) return null;\n  const s = String(v).trim();\n\n  if (/^\\d{4}-\\d{2}-\\d{2}\\s\\d{2}:\\d{2}$/.test(s)) return s;\n\n  const mIso = s.match(/^(\\d{4}-\\d{2}-\\d{2})[T\\s](\\d{2}:\\d{2})/);\n  if (mIso) return `${mIso[1]} ${mIso[2]}`;\n\n  const mBr = s.match(/^(\\d{2})\\/(\\d{2})\\/(\\d{4})\\s+(\\d{2}):(\\d{2})/);\n  if (mBr) return `${mBr[3]}-${mBr[2]}-${mBr[1]} ${mBr[4]}:${mBr[5]}`;\n\n  return null;\n}\n\nfunction deepMergeSchema(schema, data) {\n  if (Array.isArray(schema)) return Array.isArray(data) ? data : schema;\n  if (!isObject(schema)) return data === undefined ? schema : data;\n\n  const out = {};\n  for (const k of Object.keys(schema)) out[k] = deepMergeSchema(schema[k], data?.[k]);\n  return out;\n}\n\n// ---------------- Seu schema default ----------------\nconst DEFAULT_SCHEMA = {\n  itens: [],\n  resumo: {\n    data_realizacao_certame: null,\n    numero_pregao_extraido: null,\n    total_itens: 0,\n    itens_graficos: 0,\n    valor_total_licitacao: 0,\n    valor_itens_relevantes: 0,\n    percentual_relevante: 0,\n  },\n  analise: {\n    prioridade: null,\n    justificativa: null,\n    pontos_positivos: [],\n    pontos_atencao: [],\n    recomendacao: null,\n    amostra_exigida: null,\n    amostra_evidencia: null,\n  },\n  documentos_necessarios: [],\n  prazos_importantes: {\n    data_abertura_propostas: null,\n    data_realizacao_certame: null,\n    prazo_entrega_dias: 0,\n    prazo_pagamento_dias: 0,\n    prazo_vigencia_meses: 0,\n    validade_proposta_dias: 0,\n    data_limite_envio_propostas: null,\n    prazo_esclarecimentos: null,\n    prazo_impugnacao: null,\n  },\n  requisitos_tecnicos: [],\n  analise_riscos: [],\n  preferencias_me_epp: {\n    exclusivo_me_epp: null,\n    margem_preferencia_percentual: null,\n    limite_valor_exclusivo: null,\n    observacoes: null,\n  },\n  garantias: {\n    garantia_proposta_percentual: 0,\n    garantia_contratual_percentual: 0,\n    tipo_garantia_aceita: [],\n    valor_estimado_garantia: 0,\n  },\n  forma_fornecimento: {\n    tipo: null,\n    quantidade_minima_pedido: 0,\n    frequencia_entregas: null,\n    locais_entrega: [],\n    frete: null,\n  },\n};\n\n// ---------------- Normalizações específicas ----------------\nfunction normalizeConfianca(v) {\n  // Retorna SEMPRE 0..100 (inteiro)\n  // Aceita: 0..1, 0..100, ou \"alta|media|baixa\"\n  if (v === null || v === undefined) return 0;\n\n  if (typeof v === \"string\") {\n    const s = v.trim().toLowerCase();\n    if ([\"alta\", \"high\"].includes(s)) return 90;\n    if ([\"m?dia\", \"media\", \"mid\", \"medium\"].includes(s)) return 60;\n    if ([\"baixa\", \"low\"].includes(s)) return 30;\n    // tenta converter string num?rica abaixo\n  }\n\n  const n = toNumberBR(v);\n  if (n === null) return 0;\n\n  // Se veio 0..1, converte pra 0..100\n  if (n >= 0 && n <= 1) return Math.round(n * 100);\n\n  // Se veio 0..100, mant?m (clamp)\n  if (n > 1 && n <= 100) return Math.round(n);\n\n  // Se veio algo fora do esperado, faz clamp\n  const clamped = Math.max(0, Math.min(100, n));\n  return Math.round(clamped);\n}\n\nfunction normalizeItem(it) {\n  return {\n    numero: toInt(it?.numero) ?? null,\n    descricao: it?.descricao ? String(it.descricao).trim() : null,\n    quantidade: toNumberBR(it?.quantidade) ?? 0,\n    unidade: it?.unidade ? String(it.unidade).trim() : null,\n    valor_unitario: toNumberBR(it?.valor_unitario) ?? 0,\n    valor_total: toNumberBR(it?.valor_total) ?? 0,\n    e_produto_grafico: toBoolOrNull(it?.e_produto_grafico),\n    tipo_produto: it?.tipo_produto ? String(it.tipo_produto).trim() : null,\n    item_exclusivo_me_epp: toBoolOrNull(it?.item_exclusivo_me_epp),\n    evidencia: it?.evidencia ? String(it.evidencia).trim() : null,\n    confianca: normalizeConfianca(it?.confianca),\n  };\n}\n\nfunction recomputeDerived(merged) {\n  const itens = Array.isArray(merged.itens) ? merged.itens : [];\n  const graficos = itens.filter(i => i?.e_produto_grafico === true);\n\n  if ((merged.resumo.total_itens ?? 0) === 0) merged.resumo.total_itens = itens.length;\n  if ((merged.resumo.itens_graficos ?? 0) === 0) merged.resumo.itens_graficos = graficos.length;\n\n  if ((merged.resumo.valor_total_licitacao ?? 0) === 0 && itens.length > 0) {\n    merged.resumo.valor_total_licitacao = itens.reduce((acc, i) => acc + (i.valor_total || 0), 0);\n  }\n\n  if ((merged.resumo.valor_itens_relevantes ?? 0) === 0 && graficos.length > 0) {\n    merged.resumo.valor_itens_relevantes = graficos.reduce((acc, i) => acc + (i.valor_total || 0), 0);\n  }\n\n  const vt = merged.resumo.valor_total_licitacao ?? 0;\n  const vr = merged.resumo.valor_itens_relevantes ?? 0;\n  if ((merged.resumo.percentual_relevante ?? 0) === 0 && vt > 0) {\n    merged.resumo.percentual_relevante = Math.round(((vr / vt) * 100) * 100) / 100;\n  }\n}\n\nfunction getEffectiveSchema() {\n  try {\n    const schemaStr = $('Buscar Contexto Empresa').item.json.output_schema;\n    if (schemaStr) {\n      const custom = typeof schemaStr === 'string' ? JSON.parse(schemaStr) : schemaStr;\n      return deepMergeSchema(DEFAULT_SCHEMA, custom);\n    }\n  } catch (e) { /* fallback to default */ }\n  return DEFAULT_SCHEMA;\n}\n\nfunction normalizeAll(parsed) {\n  const core = unwrapOutput(parsed);\n  const effectiveSchema = getEffectiveSchema();\n  const merged = deepMergeSchema(effectiveSchema, core);\n\n  // Preserve campos_customizados from AI output\n  if (core.campos_customizados && !merged.campos_customizados) {\n    merged.campos_customizados = core.campos_customizados;\n  }\n\n  merged.itens = (Array.isArray(merged.itens) ? merged.itens : []).map(normalizeItem);\n\n  merged.resumo.data_realizacao_certame = normalizeDateTime(merged.resumo.data_realizacao_certame);\n  merged.prazos_importantes.data_realizacao_certame = normalizeDateTime(merged.prazos_importantes.data_realizacao_certame);\n  merged.prazos_importantes.data_abertura_propostas = normalizeDateTime(merged.prazos_importantes.data_abertura_propostas);\n  merged.prazos_importantes.data_limite_envio_propostas = normalizeDateTime(merged.prazos_importantes.data_limite_envio_propostas);\n\n  merged.resumo.total_itens = toInt(merged.resumo.total_itens) ?? 0;\n  merged.resumo.itens_graficos = toInt(merged.resumo.itens_graficos) ?? 0;\n  merged.resumo.valor_total_licitacao = toNumberBR(merged.resumo.valor_total_licitacao) ?? 0;\n  merged.resumo.valor_itens_relevantes = toNumberBR(merged.resumo.valor_itens_relevantes) ?? 0;\n  merged.resumo.percentual_relevante = toNumberBR(merged.resumo.percentual_relevante) ?? 0;\n\n  merged.prazos_importantes.prazo_entrega_dias = toInt(merged.prazos_importantes.prazo_entrega_dias) ?? 0;\n  merged.prazos_importantes.prazo_pagamento_dias = toInt(merged.prazos_importantes.prazo_pagamento_dias) ?? 0;\n  merged.prazos_importantes.prazo_vigencia_meses = toInt(merged.prazos_importantes.prazo_vigencia_meses) ?? 0;\n\n  merged.prazos_importantes.validade_proposta_dias = toInt(merged.prazos_importantes.validade_proposta_dias) ?? 0;\n\n  merged.analise.prioridade = normalizePriority(merged.analise.prioridade);\n  merged.analise.amostra_exigida = toBoolOrNull(merged.analise.amostra_exigida);\n  merged.analise.justificativa = merged.analise.justificativa ? String(merged.analise.justificativa).trim() : null;\n  merged.analise.recomendacao = merged.analise.recomendacao ? String(merged.analise.recomendacao).trim() : null;\n\n  const arrStr = (x) => (Array.isArray(x) ? x.map(v => String(v).trim()).filter(Boolean) : []);\n  merged.documentos_necessarios = arrStr(merged.documentos_necessarios);\n  merged.requisitos_tecnicos = arrStr(merged.requisitos_tecnicos);\n  merged.analise_riscos = arrStr(merged.analise_riscos);\n  merged.analise.pontos_positivos = arrStr(merged.analise.pontos_positivos);\n  merged.analise.pontos_atencao = arrStr(merged.analise.pontos_atencao);\n  merged.garantias.tipo_garantia_aceita = arrStr(merged.garantias.tipo_garantia_aceita);\n  merged.forma_fornecimento.locais_entrega = arrStr(merged.forma_fornecimento.locais_entrega);\n\n  merged.preferencias_me_epp.exclusivo_me_epp = toBoolOrNull(merged.preferencias_me_epp.exclusivo_me_epp);\n\n  recomputeDerived(merged);\n  return merged;\n}\n\n// ---------------- EXEC (IMPORTANTE: retorna array de items) ----------------\nconst items = $input.all();\n\nreturn items.map((item) => {\n  const rawText = getRawText(item.json);\n  if (!rawText) throw new Error(\"Não encontrei item.json.text (string) para parsear.\");\n\n  const parsed = safeJsonParse(rawText);\n  const normalized = normalizeAll(parsed);\n\n  return { json: normalized };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4496,
+        288
+      ],
+      "id": "2cb66d21-4ecc-447e-911d-3632a539bccb",
+      "name": "normalizar saída"
+    },
+    {
+      "parameters": {
+        "jsCode": "// RAG - Preparar Chunks (Clear)\n// Gera chunks + inputs para embeddings, sem misturar licitações.\n\nconst lic = $('Processar Resultado OCR').first().json;\nconst tenantId = lic.contexto_empresa?.tenant_id || $('Config Tenant').first().json.tenant_id;\nconst ragCfg = lic.contexto_empresa?.config?.rag || {};\n\nconst enabled = ragCfg.enabled === true;\nconst CHUNK_CHARS = Number(ragCfg.chunk_chars) || 4000;\nconst OVERLAP_CHARS = Number(ragCfg.overlap_chars) || 400;\nconst TOP_K = Number(ragCfg.top_k) || 8;\nconst TABLE = ragCfg.table || 'project_knowledge_base';\n\nlet content = String(lic.conteudo_texto || '');\n\nfunction normalizeText(t) {\n  return String(t)\n    .replace(/\\u0000/g, '')\n    .replace(/\\r\\n/g, '\\n')\n    .replace(/\\r/g, '\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n}\n\nfunction splitWithOverlap(text, size, overlap) {\n  const out = [];\n  if (!text) return out;\n  if (text.length <= size) return [text];\n\n  let start = 0;\n  while (start < text.length) {\n    const end = Math.min(start + size, text.length);\n    out.push(text.slice(start, end).trim());\n    if (end >= text.length) break;\n    start += Math.max(1, (size - overlap));\n  }\n  return out.filter(Boolean);\n}\n\ncontent = normalizeText(content);\n\nlet chunks = [];\nconst paras = content.split(/\\n\\n+/).map(s => s.trim()).filter(Boolean);\nif (paras.length > 1) {\n  let buf = '';\n  for (const p of paras) {\n    const next = (buf ? buf + '\\n\\n' : '') + p;\n    if (next.length > CHUNK_CHARS) {\n      if (buf) chunks.push(...splitWithOverlap(buf, CHUNK_CHARS, OVERLAP_CHARS));\n      buf = p;\n    } else {\n      buf = next;\n    }\n  }\n  if (buf) chunks.push(...splitWithOverlap(buf, CHUNK_CHARS, OVERLAP_CHARS));\n} else {\n  chunks = splitWithOverlap(content, CHUNK_CHARS, OVERLAP_CHARS);\n}\n\nconst licitacaoId = lic.id;\nconst projectId = licitacaoId;\n\nconst chunkObjs = chunks.map((chunk, idx) => ({\n  content: chunk,\n  metadata: {\n    tenant_id: tenantId,\n    project_id: projectId,\n    licitacao_id: licitacaoId,\n    chunk_index: idx,\n    total_chunks: chunks.length,\n    source: lic.ocr_metodo || 'OCR',\n    arquivo_nome: lic.arquivo_nome || null,\n  }\n}));\n\nreturn [{\n  json: {\n    rag_enabled: enabled,\n    tenant_id: tenantId,\n    project_id: projectId,\n    licitacao_id: licitacaoId,\n    table: TABLE,\n    top_k: TOP_K,\n    chunk_chars: CHUNK_CHARS,\n    overlap_chars: OVERLAP_CHARS,\n    chunks: chunkObjs,\n    inputs: chunkObjs.map(c => c.content)\n  }\n}];\n"
+      },
+      "id": "0bae8de9-a5e6-4ae9-9c8c-6448fbfd61ca",
+      "name": "RAG - Preparar Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -7088,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "DELETE FROM public.project_knowledge_base WHERE tenant_id = '{{ $json.tenant_id }}'::uuid AND project_id = '{{ $json.project_id }}'::uuid;",
+        "options": {}
+      },
+      "id": "5aa229f6-8491-447c-a96a-86c2375bd64e",
+      "name": "RAG - Limpar Vetores",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -6864,
+        288
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": {{ JSON.stringify($('RAG - Preparar Chunks').item.json.inputs) }}\n}",
+        "options": {}
+      },
+      "id": "8a0c9f00-618a-4caf-b505-8fcb14877588",
+      "name": "RAG - Embeddings Chunks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -6640,
+        288
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "FxpmukHpH6rWfbM2",
+          "name": "vive pipa"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Monta SQL de inserção na project_knowledge_base (pgvector)\nconst prep = $('RAG - Preparar Chunks').first().json;\nconst data = $input.first().json;\n\nconst embeddings = Array.isArray(data?.data) ? data.data : [];\nconst chunks = Array.isArray(prep?.chunks) ? prep.chunks : [];\n\nif (!prep?.rag_enabled) {\n  return [{ json: { query: 'SELECT 1 as rag_disabled', inserted: 0 } }];\n}\n\nif (!chunks.length || !embeddings.length) {\n  return [{ json: { query: 'SELECT 1 as rag_no_chunks', inserted: 0 } }];\n}\n\nconst tenantId = prep.tenant_id;\nconst projectId = prep.project_id;\n\nconst rows = [];\nconst n = Math.min(chunks.length, embeddings.length);\n\nfor (let i = 0; i < n; i++) {\n  const c = chunks[i];\n  const emb = embeddings[i]?.embedding;\n  if (!emb) continue;\n\n  const content = String(c.content || '')\n    .replace(/\\u0000/g, '')\n    .replace(/'/g, \"''\");\n  const metadataJson = JSON.stringify(c.metadata || {})\n    .replace(/\\u0000/g, '')\n    .replace(/'/g, \"''\");\n  const vectorJson = JSON.stringify(emb);\n\n  rows.push(\n    \"('\" + tenantId + \"'::uuid, '\" + projectId + \"'::uuid, '\" + content + \"', '\" + metadataJson + \"'::jsonb, '\" + vectorJson + \"'::vector)\"\n  );\n}\n\nif (!rows.length) {\n  return [{ json: { query: 'SELECT 1 as rag_no_rows', inserted: 0 } }];\n}\n\nconst sql =\n  'INSERT INTO public.project_knowledge_base (tenant_id, project_id, content, metadata, embedding) VALUES ' +\n  rows.join(', ') +\n  ' RETURNING id;';\n\nreturn [{ json: { query: sql, inserted: rows.length } }];\n"
+      },
+      "id": "17c96b74-1dc1-4acd-9dd7-253d06690d91",
+      "name": "RAG - Montar INSERT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6416,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {}
+      },
+      "id": "5dbeea0f-7f70-448d-9e9f-89ac386e1e7a",
+      "name": "RAG - Gravar Vetores",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -6192,
+        288
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Queries semânticas para recuperar trechos (por licitação)\nconst prep = $('RAG - Preparar Chunks').first().json;\n\nconst topK = prep?.top_k || 8;\n\nconst queries = [\n  { name: 'datas', text: 'data e hora da sessão/disputa/abertura; recebimento de propostas; data limite; pregão eletrônico' },\n  { name: 'itens', text: 'tabela de itens/lotes: item, descrição, quantidade, unidade, valor unitário, valor total; papel, resma, A4, bobina; cota reservada' },\n  { name: 'prazos', text: 'prazos: entrega, pagamento, vigência do contrato/ata, validade da proposta, impugnação, esclarecimentos' },\n  { name: 'amostra', text: 'exigência de amostra: apresentação/entrega de amostra, protótipo, amostra física; prazo e local' },\n  { name: 'me_epp', text: 'ME/EPP por item: exclusivo ME/EPP, cota reservada, cota principal, LC 123, microempresa' },\n];\n\nreturn [{\n  json: {\n    tenant_id: prep.tenant_id,\n    project_id: prep.project_id,\n    top_k: topK,\n    table: prep.table || 'project_knowledge_base',\n    queries,\n    inputs: queries.map(q => q.text)\n  }\n}];\n"
+      },
+      "id": "2a1dfa66-d09b-4f20-b0f0-d3cf6f22cef0",
+      "name": "RAG - Preparar Queries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5968,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/embeddings",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"text-embedding-3-small\",\n  \"input\": {{ JSON.stringify($json.inputs) }}\n}",
+        "options": {}
+      },
+      "id": "a97d3a31-ca26-4444-8a9c-e856bd5d4442",
+      "name": "RAG - Embeddings Queries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -5744,
+        288
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "openAiApi": {
+          "id": "FxpmukHpH6rWfbM2",
+          "name": "vive pipa"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Monta SQL para recuperar topK GLOBAL (sem misturar licita??es e sem duplicar chunks entre queries)\nconst prep = $('RAG - Preparar Queries').first().json;\nconst embResp = $input.first().json;\n\nconst embeddings = Array.isArray(embResp?.data) ? embResp.data : [];\nconst queries = Array.isArray(prep?.queries) ? prep.queries : [];\n\nconst tenantId = prep.tenant_id;\nconst projectId = prep.project_id;\nconst topK = prep.top_k || 8;\nconst table = prep.table || 'project_knowledge_base';\n\nif (!queries.length || !embeddings.length) {\n  return [{ json: { query: 'SELECT NULL::text as query_name, NULL::text as content, NULL::jsonb as metadata, NULL::numeric as similarity, 0 as rn LIMIT 0;' } }];\n}\n\nconst values = [];\nconst n = Math.min(queries.length, embeddings.length);\nfor (let i = 0; i < n; i++) {\n  const q = queries[i];\n  const emb = embeddings[i]?.embedding;\n  if (!emb) continue;\n  const vec = JSON.stringify(emb);\n  const name = String(q.name).replace(/'/g, \"''\");\n  values.push(\"('\" + name + \"', '\" + vec + \"'::vector)\");\n}\n\nif (!values.length) {\n  return [{ json: { query: 'SELECT NULL::text as query_name, NULL::text as content, NULL::jsonb as metadata, NULL::numeric as similarity, 0 as rn LIMIT 0;' } }];\n}\n\n// Estrat?gia:\n// - calcula dist?ncia de cada chunk para cada query\n// - escolhe a melhor query por chunk (DISTINCT por kb.id)\n// - ranqueia globalmente e aplica topK total\nconst sql =\n  'WITH q(name, embedding) AS (VALUES ' + values.join(', ') + ') ' +\n  ' , scored AS ( ' +\n  '   SELECT kb.id, kb.content, kb.metadata, q.name as query_name, (kb.embedding <=> q.embedding) as distance, ' +\n  '          row_number() OVER (PARTITION BY kb.id ORDER BY (kb.embedding <=> q.embedding)) as rn_best_query ' +\n  '   FROM q ' +\n  '   JOIN public.' + table + ' kb ' +\n  '     ON kb.tenant_id = ' + \"'\" + tenantId + \"'\" + '::uuid ' +\n  '    AND kb.project_id = ' + \"'\" + projectId + \"'\" + '::uuid ' +\n  '    AND kb.embedding IS NOT NULL ' +\n  ' ) ' +\n  ' , best AS ( ' +\n  '   SELECT id, content, metadata, query_name, distance ' +\n  '   FROM scored WHERE rn_best_query = 1 ' +\n  ' ) ' +\n  ' , ranked AS ( ' +\n  '   SELECT query_name, content, metadata, (1 - distance) as similarity, ' +\n  '          row_number() OVER (ORDER BY distance) as rn ' +\n  '   FROM best ' +\n  ' ) ' +\n  ' SELECT query_name, content, metadata, similarity, rn ' +\n  ' FROM ranked WHERE rn <= ' + topK + ' ORDER BY rn;';\n\nreturn [{ json: { query: sql } }];\n"
+      },
+      "id": "6e6e18b1-2005-4793-92af-8fa591ced1ef",
+      "name": "RAG - Montar SELECT",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5520,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.query }}",
+        "options": {}
+      },
+      "id": "21523acc-711b-4cf6-9950-98249966fff3",
+      "name": "RAG - Buscar Trechos",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -5296,
+        288
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Monta um texto compacto com os trechos recuperados\nconst prep = $('RAG - Preparar Chunks').first().json;\nconst lic = $('Processar Resultado OCR').first().json;\nconst rows = $input.all().map(i => i.json).filter(r => r && r.query_name);\n\nconst order = ['datas', 'itens', 'prazos', 'amostra', 'me_epp'];\nconst grouped = new Map();\nfor (const r of rows) {\n  const name = String(r.query_name);\n  if (!grouped.has(name)) grouped.set(name, []);\n  grouped.get(name).push(r);\n}\n\nfunction safeMeta(m) {\n  if (!m) return {};\n  if (typeof m === 'object') return m;\n  try { return JSON.parse(String(m)); } catch { return {}; }\n}\n\nlet out = '';\nout += 'LICITACAO_ID: ' + prep.licitacao_id + '\\n';\nout += 'RAG_PROJECT_ID: ' + prep.project_id + '\\n';\nout += 'REGRAS: use SOMENTE os trechos abaixo para preencher o JSON. Se não achar, use null/0/[].\\n';\nout += '---\\n';\n\nif (!rows.length) {\n  out += '[RAG] Nenhum trecho recuperado. Use o OCR bruto (mesma licitação) com cautela.\\n\\n';\n  out += String(lic.conteudo_texto || '').slice(0, 30000);\n  return [{ json: { contexto_rag: out, rag_rows: 0 } }];\n}\n\nfor (const name of order) {\n  const list = grouped.get(name) || [];\n  if (!list.length) continue;\n  out += '\\n## ' + name.toUpperCase() + '\\n';\n  for (const r of list) {\n    const meta = safeMeta(r.metadata);\n    const idx = meta.chunk_index ?? null;\n    const total = meta.total_chunks ?? null;\n    const src = meta.source ?? null;\n    const prefix = '[chunk ' + idx + (total !== null ? '/' + total : '') + (src ? ' | ' + src : '') + ']';\n    const content = String(r.content || '').trim();\n    out += prefix + ' ' + content + '\\n---\\n';\n  }\n}\n\nreturn [{ json: { contexto_rag: out, rag_rows: rows.length } }];\n"
+      },
+      "id": "9db74cff-c967-40ee-b373-01ab19eabe87",
+      "name": "RAG - Montar Contexto",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -5072,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE workflow_executions \nSET \n  status = 'SUCCESS',\n  finished_at = NOW(),\n  progress = 100,\n  current_step = 'Análise concluída com sucesso',\n  logs = logs || jsonb_build_object('time', NOW(), 'message', 'Workflow finalizado com sucesso', 'level', 'info')\nWHERE id = '{{ $('Start Execution').item.json.execution_id }}'",
+        "options": {}
+      },
+      "id": "0050a73c-60ec-426e-86a1-f1565d41370d",
+      "name": "Finish Execution1",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -9280,
+        16
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "postgres": {
+          "id": "HHXomrhMnwSNVOs1",
+          "name": "licitacaoteste"
+        }
+      }
+    }
+  ],
+  "pinData": {
+    "Manual Trigger": [
+      {
+        "json": {}
+      }
+    ],
+    "Webhook Analise Editais": [
+      {
+        "json": {
+          "headers": {
+            "host": "n8n-n8n-start.jz9bd8.easypanel.host",
+            "user-agent": "node",
+            "content-length": "218",
+            "accept": "*/*",
+            "accept-encoding": "br, gzip, deflate",
+            "accept-language": "*",
+            "authorization": "Bearer sua-chave-secreta-n8n",
+            "content-type": "application/json",
+            "sec-fetch-mode": "cors",
+            "x-forwarded-for": "177.10.6.169",
+            "x-forwarded-host": "n8n-n8n-start.jz9bd8.easypanel.host",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "67ae9cdeab89",
+            "x-real-ip": "177.10.6.169"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "tenant_id": "0161fa75-225b-473b-8e63-3c4c1f5456d7",
+            "execution_id": "4a27333a-80a5-43ae-b28b-7bb0ddf7b7ec",
+            "callback_url": "http://localhost:3000/api/n8n/callback",
+            "progress_url": "http://localhost:3000/api/n8n/progress"
+          },
+          "webhookUrl": "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/analise-editais",
+          "executionMode": "production"
+        },
+        "pairedItem": {
+          "item": 0
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Config Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Analise Editais": {
+      "main": [
+        [
+          {
+            "node": "Config Tenant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config Tenant": {
+      "main": [
+        [
+          {
+            "node": "Start Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Execution": {
+      "main": [
+        [
+          {
+            "node": "Buscar Contexto Empresa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Progress": {
+      "main": [
+        [
+          {
+            "node": "Construir URL Edital",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Contexto Empresa": {
+      "main": [
+        [
+          {
+            "node": "Select Licitações Pendentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Licitações Pendentes": {
+      "main": [
+        [
+          {
+            "node": "Loop Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Licitações": {
+      "main": [
+        [
+          {
+            "node": "Finish Execution",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Progress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir URL Edital": {
+      "main": [
+        [
+          {
+            "node": "Listar Arquivos PNCP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Arquivos PNCP": {
+      "main": [
+        [
+          {
+            "node": "Preparar Documentos OCR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Documentos OCR": {
+      "main": [
+        [
+          {
+            "node": "Tem Arquivo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem Arquivo?": {
+      "main": [
+        [
+          {
+            "node": "Webhook OCR Supremo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar Sem Edital",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook OCR Supremo": {
+      "main": [
+        [
+          {
+            "node": "Processar Resultado OCR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processar Resultado OCR": {
+      "main": [
+        [
+          {
+            "node": "Gravar Edital",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Edital": {
+      "main": [
+        [
+          {
+            "node": "OCR Sucesso?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OCR Sucesso?": {
+      "main": [
+        [
+          {
+            "node": "RAG - Preparar Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Marcar Erro OCR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processar Resposta IA": {
+      "main": [
+        [
+          {
+            "node": "Gravar Itens",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Itens": {
+      "main": [
+        [
+          {
+            "node": "Gravar Análise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Análise": {
+      "main": [
+        [
+          {
+            "node": "Update Status ANALISADA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Status ANALISADA": {
+      "main": [
+        [
+          {
+            "node": "Continua Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar Erro OCR": {
+      "main": [
+        [
+          {
+            "node": "Continua Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar Sem Edital": {
+      "main": [
+        [
+          {
+            "node": "Continua Loop",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continua Loop": {
+      "main": [
+        [
+          {
+            "node": "Loop Licitações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Pré-Triagem": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preparar Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Pré-Triagem": {
+      "main": [
+        [
+          {
+            "node": "IA Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IA Pré-Triagem": {
+      "main": [
+        [
+          {
+            "node": "Processar Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Output Parser Pré-Triagem": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "IA Pré-Triagem",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processar Pré-Triagem": {
+      "main": [
+        [
+          {
+            "node": "Relevante?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relevante?": {
+      "main": [
+        [
+          {
+            "node": "Coletar Para Análise",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gravar Rejeição Rápida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar Rejeição Rápida": {
+      "main": [
+        [
+          {
+            "node": "Marcar Rejeitada Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Marcar Rejeitada Pré-Triagem": {
+      "main": [
+        [
+          {
+            "node": "Continua Loop Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continua Loop Pré-Triagem": {
+      "main": [
+        [
+          {
+            "node": "Loop Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coletar Para Análise": {
+      "main": [
+        [
+          {
+            "node": "Loop Pré-Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Finish Execution1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Licitações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "IA Pré-Triagem",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Análise Completa",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Análise Completa": {
+      "main": [
+        [
+          {
+            "node": "normalizar saída",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "normalizar saída": {
+      "main": [
+        [
+          {
+            "node": "Processar Resposta IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Preparar Chunks": {
+      "main": [
+        [
+          {
+            "node": "RAG - Limpar Vetores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Limpar Vetores": {
+      "main": [
+        [
+          {
+            "node": "RAG - Embeddings Chunks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Embeddings Chunks": {
+      "main": [
+        [
+          {
+            "node": "RAG - Montar INSERT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Montar INSERT": {
+      "main": [
+        [
+          {
+            "node": "RAG - Gravar Vetores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Gravar Vetores": {
+      "main": [
+        [
+          {
+            "node": "RAG - Preparar Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Preparar Queries": {
+      "main": [
+        [
+          {
+            "node": "RAG - Embeddings Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Embeddings Queries": {
+      "main": [
+        [
+          {
+            "node": "RAG - Montar SELECT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Montar SELECT": {
+      "main": [
+        [
+          {
+            "node": "RAG - Buscar Trechos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Buscar Trechos": {
+      "main": [
+        [
+          {
+            "node": "RAG - Montar Contexto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG - Montar Contexto": {
+      "main": [
+        [
+          {
+            "node": "AI Análise Completa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "2ff0ad31-45cd-4da9-ab63-e2bf301967ab",
+  "meta": {
+    "instanceId": "98a7f76cbff973591af08e09b5be2fed14b55b37d878782c0638229a94477203"
+  },
+  "id": "R5Y2AfQSQrNFVS4l",
+  "tags": []
+}
