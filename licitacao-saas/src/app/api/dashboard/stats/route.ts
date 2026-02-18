@@ -11,17 +11,19 @@ export async function GET() {
   }
 
   const [kpis, byUf, byPriority, byWeek, byPhase, urgent, todayActivity] = await Promise.all([
-    // KPIs
+    // KPIs (join analises to count correctly - n8n may not update licitacoes.status for pre-triagem rejections)
     query(
       `SELECT
         COUNT(*) as total,
-        COUNT(*) FILTER (WHERE status IN ('ANALISADA', 'SEM_EDITAL', 'ERRO_OCR') OR review_phase = 'REJEITADA') as analisadas,
-        COUNT(*) FILTER (WHERE status = 'NOVA') as novas,
-        COUNT(*) FILTER (WHERE review_phase IN ('DECISAO','PREPARACAO','PARTICIPANDO')) as no_pipeline,
-        COUNT(*) FILTER (WHERE review_phase = 'CONCLUIDA') as concluidas,
-        COALESCE(SUM(valor_total_estimado) FILTER (WHERE review_phase IN ('DECISAO','PREPARACAO','PARTICIPANDO')), 0) as valor_pipeline,
-        COALESCE(SUM(valor_total_estimado), 0) as valor_total
-      FROM licitacoes WHERE tenant_id = $1`,
+        COUNT(a.id) as analisadas,
+        COUNT(*) FILTER (WHERE a.id IS NULL) as novas,
+        COUNT(*) FILTER (WHERE l.review_phase IN ('DECISAO','PREPARACAO','PARTICIPANDO')) as no_pipeline,
+        COUNT(*) FILTER (WHERE l.review_phase = 'CONCLUIDA') as concluidas,
+        COALESCE(SUM(l.valor_total_estimado) FILTER (WHERE l.review_phase IN ('DECISAO','PREPARACAO','PARTICIPANDO')), 0) as valor_pipeline,
+        COALESCE(SUM(l.valor_total_estimado), 0) as valor_total
+      FROM licitacoes l
+      LEFT JOIN analises a ON a.licitacao_id = l.id
+      WHERE l.tenant_id = $1`,
       [tenantId]
     ),
     // By UF
@@ -70,20 +72,20 @@ export async function GET() {
        LIMIT 5`,
       [tenantId]
     ),
-    // Today's activity (using São Paulo timezone)
+    // Today's activity (using São Paulo timezone, analises.created_at as source of truth)
     query(
       `WITH tz AS (
         SELECT (NOW() AT TIME ZONE 'America/Sao_Paulo')::date as hoje
       )
       SELECT
         COUNT(*) FILTER (WHERE (l.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as novas_hoje,
-        COUNT(*) FILTER (WHERE l.status IN ('ANALISADA','SEM_EDITAL','ERRO_OCR') AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as analisadas_hoje,
-        COUNT(*) FILTER (WHERE a.prioridade = 'P1' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje AND l.status = 'ANALISADA') as p1_hoje,
-        COUNT(*) FILTER (WHERE a.prioridade = 'P2' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje AND l.status = 'ANALISADA') as p2_hoje,
-        COUNT(*) FILTER (WHERE a.prioridade = 'P3' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje AND l.status = 'ANALISADA') as p3_hoje,
-        COUNT(*) FILTER (WHERE a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as rejeitadas_ia_hoje,
+        COUNT(*) FILTER (WHERE a.id IS NOT NULL AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as analisadas_hoje,
+        COUNT(*) FILTER (WHERE a.prioridade = 'P1' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as p1_hoje,
+        COUNT(*) FILTER (WHERE a.prioridade = 'P2' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as p2_hoje,
+        COUNT(*) FILTER (WHERE a.prioridade = 'P3' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as p3_hoje,
+        COUNT(*) FILTER (WHERE a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as rejeitadas_ia_hoje,
         COUNT(*) FILTER (WHERE (l.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1) as novas_ontem,
-        COUNT(*) FILTER (WHERE l.status IN ('ANALISADA','SEM_EDITAL','ERRO_OCR') AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1) as analisadas_ontem
+        COUNT(*) FILTER (WHERE a.id IS NOT NULL AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1) as analisadas_ontem
        FROM licitacoes l
        CROSS JOIN tz
        LEFT JOIN analises a ON a.licitacao_id = l.id
