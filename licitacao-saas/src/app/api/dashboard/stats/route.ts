@@ -70,18 +70,22 @@ export async function GET() {
        LIMIT 5`,
       [tenantId]
     ),
-    // Today's activity
+    // Today's activity (using São Paulo timezone)
     query(
-      `SELECT
-        COUNT(*) FILTER (WHERE l.created_at >= CURRENT_DATE) as novas_hoje,
-        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE) as analisadas_hoje,
-        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.prioridade = 'P1') as p1_hoje,
-        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.prioridade = 'P2') as p2_hoje,
-        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.prioridade = 'P3') as p3_hoje,
-        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE AND a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR') as rejeitadas_ia_hoje,
-        COUNT(*) FILTER (WHERE l.created_at >= CURRENT_DATE - INTERVAL '1 day' AND l.created_at < CURRENT_DATE) as novas_ontem,
-        COUNT(*) FILTER (WHERE a.created_at >= CURRENT_DATE - INTERVAL '1 day' AND a.created_at < CURRENT_DATE) as analisadas_ontem
+      `WITH tz AS (
+        SELECT (NOW() AT TIME ZONE 'America/Sao_Paulo')::date as hoje
+      )
+      SELECT
+        COUNT(*) FILTER (WHERE (l.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as novas_hoje,
+        COUNT(*) FILTER (WHERE l.status IN ('ANALISADA','SEM_EDITAL','ERRO_OCR') AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as analisadas_hoje,
+        COUNT(*) FILTER (WHERE a.prioridade = 'P1' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje AND l.status = 'ANALISADA') as p1_hoje,
+        COUNT(*) FILTER (WHERE a.prioridade = 'P2' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje AND l.status = 'ANALISADA') as p2_hoje,
+        COUNT(*) FILTER (WHERE a.prioridade = 'P3' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje AND l.status = 'ANALISADA') as p3_hoje,
+        COUNT(*) FILTER (WHERE a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR' AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as rejeitadas_ia_hoje,
+        COUNT(*) FILTER (WHERE (l.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1) as novas_ontem,
+        COUNT(*) FILTER (WHERE l.status IN ('ANALISADA','SEM_EDITAL','ERRO_OCR') AND (l.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1) as analisadas_ontem
        FROM licitacoes l
+       CROSS JOIN tz
        LEFT JOIN analises a ON a.licitacao_id = l.id
        WHERE l.tenant_id = $1`,
       [tenantId]
