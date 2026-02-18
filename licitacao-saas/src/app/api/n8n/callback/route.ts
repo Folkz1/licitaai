@@ -73,24 +73,34 @@ export async function POST(req: NextRequest) {
   if (workflow === "ANALISE_EDITAIS" && (status === "OK" || status === "SUCCESS") && tenant_id) {
     await query(
       `UPDATE licitacoes l
-       SET review_phase = 'PRE_TRIAGEM'
+       SET status = 'ANALISADA',
+           updated_at = NOW()
+       FROM analises a
+       WHERE a.licitacao_id = l.id
+         AND l.tenant_id = $1
+         AND l.status <> 'ANALISADA'`,
+      [tenant_id]
+    );
+    await query(
+      `UPDATE licitacoes l
+       SET review_phase = 'PRE_TRIAGEM',
+           updated_at = NOW()
        FROM analises a
        WHERE a.licitacao_id = l.id
          AND l.tenant_id = $1
          AND l.review_phase = 'NOVA'
-         AND l.status = 'ANALISADA'
          AND a.prioridade IN ('P1', 'P2')
          AND (a.tipo_oportunidade IS NULL OR a.tipo_oportunidade <> 'PRE_TRIAGEM_REJEITAR')`,
       [tenant_id]
     );
     await query(
       `UPDATE licitacoes l
-       SET review_phase = 'REJEITADA'
+       SET review_phase = 'REJEITADA',
+           updated_at = NOW()
        FROM analises a
        WHERE a.licitacao_id = l.id
          AND l.tenant_id = $1
          AND l.review_phase = 'NOVA'
-         AND l.status = 'ANALISADA'
          AND a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR'`,
       [tenant_id]
     );
