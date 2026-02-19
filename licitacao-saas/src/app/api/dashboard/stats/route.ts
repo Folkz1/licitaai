@@ -72,20 +72,49 @@ export async function GET() {
        LIMIT 5`,
       [tenantId]
     ),
-    // Today's activity (using São Paulo timezone, analises.created_at as source of truth)
+    // Today's activity (using São Paulo timezone, analises.updated_at as source of truth)
     query(
       `WITH tz AS (
         SELECT (NOW() AT TIME ZONE 'America/Sao_Paulo')::date as hoje
       )
       SELECT
         COUNT(*) FILTER (WHERE (l.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as novas_hoje,
-        COUNT(*) FILTER (WHERE a.id IS NOT NULL AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as analisadas_hoje,
-        COUNT(*) FILTER (WHERE a.prioridade = 'P1' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as p1_hoje,
-        COUNT(*) FILTER (WHERE a.prioridade = 'P2' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as p2_hoje,
-        COUNT(*) FILTER (WHERE a.prioridade = 'P3' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as p3_hoje,
-        COUNT(*) FILTER (WHERE a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR' AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje) as rejeitadas_ia_hoje,
+        COUNT(*) FILTER (
+          WHERE a.id IS NOT NULL
+            AND (a.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje
+            AND (
+              a.tipo_oportunidade IN ('PRE_TRIAGEM_REJEITAR', 'PARTICIPAR', 'AVALIAR', 'REJEITAR')
+              OR a.tipo_oportunidade IS NULL
+            )
+        ) as analisadas_hoje,
+        COUNT(*) FILTER (
+          WHERE a.prioridade = 'P1'
+            AND (a.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje
+            AND COALESCE(a.tipo_oportunidade, '') <> 'PRE_TRIAGEM_REJEITAR'
+        ) as p1_hoje,
+        COUNT(*) FILTER (
+          WHERE a.prioridade = 'P2'
+            AND (a.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje
+            AND COALESCE(a.tipo_oportunidade, '') <> 'PRE_TRIAGEM_REJEITAR'
+        ) as p2_hoje,
+        COUNT(*) FILTER (
+          WHERE a.prioridade = 'P3'
+            AND (a.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje
+            AND COALESCE(a.tipo_oportunidade, '') <> 'PRE_TRIAGEM_REJEITAR'
+        ) as p3_hoje,
+        COUNT(*) FILTER (
+          WHERE a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR'
+            AND (a.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje
+        ) as rejeitadas_ia_hoje,
         COUNT(*) FILTER (WHERE (l.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1) as novas_ontem,
-        COUNT(*) FILTER (WHERE a.id IS NOT NULL AND (a.created_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1) as analisadas_ontem
+        COUNT(*) FILTER (
+          WHERE a.id IS NOT NULL
+            AND (a.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = tz.hoje - 1
+            AND (
+              a.tipo_oportunidade IN ('PRE_TRIAGEM_REJEITAR', 'PARTICIPAR', 'AVALIAR', 'REJEITAR')
+              OR a.tipo_oportunidade IS NULL
+            )
+        ) as analisadas_ontem
        FROM licitacoes l
        CROSS JOIN tz
        LEFT JOIN analises a ON a.licitacao_id = l.id
