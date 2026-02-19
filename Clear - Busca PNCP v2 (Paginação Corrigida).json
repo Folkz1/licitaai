@@ -6,13 +6,13 @@
         "query": "={{ $json.execution_id ? \"UPDATE workflow_executions SET status = 'RUNNING', started_at = NOW(), current_step = 'Iniciando busca no PNCP...', logs = '[]'::jsonb WHERE id = '\" + $json.execution_id + \"' RETURNING id as execution_id\" : \"INSERT INTO workflow_executions (tenant_id, workflow_type, status, started_at, current_step, logs, metrics) VALUES ('\" + $json.tenant_id + \"', 'busca', 'RUNNING', NOW(), 'Iniciando busca no PNCP...', '[]'::jsonb, '{}'::jsonb) RETURNING id as execution_id\" }}",
         "options": {}
       },
-      "id": "fde752fc-5012-4b1c-b571-8e2638723d47",
+      "id": "2b457946-ef37-4605-890e-13137dc63c90",
       "name": "Start Busca",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -13440,
-        2320
+        -13216,
+        3248
       ],
       "credentials": {
         "postgres": {
@@ -27,13 +27,13 @@
         "query": "UPDATE workflow_executions \nSET \n  current_step = 'Buscando página {{ $json.pagina }}...'\nWHERE id = '{{ $('Start Busca').first().json.execution_id }}'",
         "options": {}
       },
-      "id": "2c02d76a-26a8-49db-9985-35ac75011814",
+      "id": "85e3ad09-9283-41ad-8e05-e114abbeac4d",
       "name": "Update Busca Progress",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -11184,
-        2064
+        -10960,
+        2992
       ],
       "executeOnce": true,
       "credentials": {
@@ -49,13 +49,13 @@
         "query": "UPDATE workflow_executions \nSET \n  status = 'SUCCESS',\n  finished_at = NOW(),\n  progress = 100,\n  current_step = 'Busca concluída',\n  logs = logs || jsonb_build_object('time', NOW(), 'message', 'Busca finalizada', 'level', 'info')\nWHERE id = '{{ $('Start Busca').first().json.execution_id }}'",
         "options": {}
       },
-      "id": "364f5ed0-d391-44a6-9e42-38bb93ac37bf",
+      "id": "e97a1b91-d74e-4c41-bece-423e207fc8c0",
       "name": "Finish Busca",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -11184,
-        1888
+        -10960,
+        2816
       ],
       "credentials": {
         "postgres": {
@@ -66,37 +66,17 @@
     },
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 6 * * 1"
-            }
-          ]
-        }
-      },
-      "id": "58081969-5de4-47fb-83d2-3283ac84320c",
-      "name": "Cron Segunda 6h",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -13904,
-        2560
-      ]
-    },
-    {
-      "parameters": {
         "httpMethod": "POST",
         "path": "busca-pncp",
         "options": {}
       },
-      "id": "aea3f81a-a384-4e68-a74b-6bdda570a746",
+      "id": "5b2c96ca-988e-44cf-9cf6-fe903e381e3f",
       "name": "Webhook Busca PNCP",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
       "position": [
-        -13904,
-        2176
+        -13696,
+        3424
       ],
       "webhookId": "busca-pncp-webhook-id"
     },
@@ -106,13 +86,13 @@
         "jsonOutput": "={\n  \"tenant_id\": \"{{ $json.body.tenant_id || '00000000-0000-0000-0000-000000000001' }}\",\n  \"tenant_nome\": \"{{ $json.tenant_nome || 'Clear' }}\",\n  \"inicio_execucao\": \"{{ $now.toISO() }}\",\n  \"execution_id\": {{ $json.body.execution_id ? '\"' + $json.body.execution_id + '\"' : 'null' }}\n}",
         "options": {}
       },
-      "id": "e4602d3b-aec6-4d87-b450-2ec01a2cf773",
+      "id": "843492da-abe9-4964-bd75-8f4e60c72193",
       "name": "Config Tenant",
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -13680,
-        2464
+        -13456,
+        3392
       ]
     },
     {
@@ -121,13 +101,13 @@
         "query": "SELECT cb.id, cb.nome, cb.modalidades_contratacao, cb.ufs, cb.dias_retroativos, t.config as tenant_config FROM configuracoes_busca cb JOIN tenants t ON t.id = cb.tenant_id WHERE cb.tenant_id = '{{ $('Config Tenant').item.json.tenant_id }}' AND cb.ativa = TRUE AND t.ativo = TRUE",
         "options": {}
       },
-      "id": "2a84ead3-31b1-45ec-b084-c987fbcc729f",
+      "id": "bb331df7-534e-4e6e-8740-94c9248e508d",
       "name": "Buscar Config",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -13232,
-        2464
+        -13008,
+        3392
       ],
       "credentials": {
         "postgres": {
@@ -142,13 +122,13 @@
         "query": "SELECT palavra, tipo, variacoes, peso FROM palavras_chave WHERE tenant_id = '{{ $('Config Tenant').item.json.tenant_id }}' AND ativa = TRUE ORDER BY tipo, peso DESC",
         "options": {}
       },
-      "id": "4a38c64b-6b47-469d-9da1-84b9977cb1cd",
+      "id": "15c44a89-0099-4554-8913-3db5d784cfbe",
       "name": "Buscar Palavras",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -13008,
-        2464
+        -12784,
+        3392
       ],
       "credentials": {
         "postgres": {
@@ -161,13 +141,13 @@
       "parameters": {
         "jsCode": "const moment = require('moment');\nconst tenantId = $('Config Tenant').first().json.tenant_id;\nconst inicioExecucao = $('Config Tenant').first().json.inicio_execucao;\nconst configs = $('Buscar Config').all();\nconst palavras = $('Buscar Palavras').all();\n\nconst palavrasInclusao = palavras.filter(p => p.json.tipo === 'INCLUSAO').map(p => p.json.palavra);\nconst palavrasExclusao = palavras.filter(p => p.json.tipo === 'EXCLUSAO').map(p => [p.json.palavra, ...(p.json.variacoes || [])]).flat();\n\nconst buscas = [];\nfor (const config of configs) {\n  const dias = config.json.dias_retroativos || 8;\n  const dataInicial = moment().subtract(dias, 'days').format('YYYYMMDD');\n  const dataFinal = moment().format('YYYYMMDD');\n  // PNCP: 6 = Pregão Eletrônico, 8 = Dispensa (default de fallback)\n  const mods = config.json.modalidades_contratacao || [6, 8];\n  \n  // Tratar UF: Se for nulo ou array vazio, usa null para buscar tudo\n  let ufs = config.json.ufs;\n  if (!ufs || ufs.length === 0) {\n    ufs = [null]; \n  }\n\n  for (const mod of mods) {\n    for (const uf of ufs) {\n      buscas.push({ \n        tenant_id: tenantId, \n        inicio_execucao: inicioExecucao, \n        data_inicial: dataInicial, \n        data_final: dataFinal, \n        modalidade: mod, \n        uf: uf, // Pode ser 'MG', 'SP' ou null/undefined\n        palavras_inclusao: palavrasInclusao,\n        palavras_exclusao: palavrasExclusao, \n        tenant_config: config.json.tenant_config || {} \n      });\n    }\n  }\n}\nreturn buscas.map(b => ({ json: b }));"
       },
-      "id": "011563e9-90a0-4802-9522-5323ae0ff9c7",
+      "id": "5b396633-8b3e-481c-9668-2618c4e225f9",
       "name": "Montar Buscas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -12784,
-        2464
+        -12560,
+        3392
       ]
     },
     {
@@ -176,13 +156,13 @@
           "reset": false
         }
       },
-      "id": "2ad91f91-aba9-449b-a2b5-67bdcfc65482",
+      "id": "1b8256aa-05c8-4ee6-b5d9-aaefaf1f5143",
       "name": "Loop Buscas",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -12560,
-        2464
+        -12336,
+        3392
       ]
     },
     {
@@ -230,29 +210,30 @@
           "timeout": 120000
         }
       },
-      "id": "efddb9a7-b1e9-4968-925b-bbeeaf1088b1",
+      "id": "569822eb-f1cc-4f92-8004-a3d3249d1140",
       "name": "1ª Chamada - Metadados",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -12224,
-        2480
+        -12000,
+        3408
       ],
-      "retryOnFail": false,
-      "waitBetweenTries": 2000,
-      "alwaysOutputData": true
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "alwaysOutputData": true,
+      "maxTries": 5
     },
     {
       "parameters": {
         "jsCode": "const primeiraResposta = $input.first().json;\nconst totalDePaginas = primeiraResposta.totalPaginas || 1;\nconst totalRegistros = primeiraResposta.totalRegistros || 0;\nconst buscaParams = $('Loop Buscas').first().json;\n\nconsole.log('[BUSCA_PNCP] Metadados', {\n  tenant_id: buscaParams.tenant_id,\n  uf: buscaParams.uf,\n  modalidade: buscaParams.modalidade,\n  data_inicial: buscaParams.data_inicial,\n  data_final: buscaParams.data_final,\n  totalRegistros,\n  totalDePaginas,\n});\n\nconst paginasParaBuscar = [];\nfor (let i = 1; i <= totalDePaginas; i++) {\n  paginasParaBuscar.push({\n    json: {\n      pagina: i,\n      ...buscaParams // Isso copia data_inicial, uf, modalidade, etc\n    }\n  });\n}\nreturn paginasParaBuscar;"
       },
-      "id": "73e686e8-abb7-4f47-86e1-158dc990fb74",
+      "id": "5f7990c7-8508-4b8a-a933-f199e8fd7465",
       "name": "Gerar Loop Paginas",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -11888,
-        2480
+        -11664,
+        3408
       ],
       "alwaysOutputData": true
     },
@@ -300,37 +281,37 @@
         "options": {
           "batching": {
             "batch": {
-              "batchSize": 2,
-              "batchInterval": 2000
+              "batchSize": 1
             }
           },
-          "timeout": 120000
+          "timeout": 1200000
         }
       },
-      "id": "cec34408-7e6a-4c94-b790-dd3a4a72ca80",
+      "id": "aa313f1c-98e9-4972-a68c-41f563af85f6",
       "name": "2ª Chamada - Busca Detalhada",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        -11136,
-        2208
+        -10960,
+        3152
       ],
       "alwaysOutputData": true,
-      "retryOnFail": false,
-      "waitBetweenTries": 2000,
+      "retryOnFail": true,
+      "waitBetweenTries": 5000,
+      "maxTries": 5,
       "onError": "continueRegularOutput"
     },
     {
       "parameters": {
         "jsCode": "const moment = require('moment');\nconst licitacoesFiltradas = [];\n\n// Helper para normalizar texto (remove acentos e lowercase)\nconst normalize = (text) => (text || '').toLowerCase().normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\");\n\n// Situações válidas (1 = Divulgada no PNCP)\nconst SITUACOES_VALIDAS = [1];\n\n// Função híbrida de busca - campos específicos + fallback JSON\nconst buscarPalavraHibrido = (licitacao, palavra) => {\n  const palavraNorm = normalize(palavra);\n\n  // 1) Campos prioritários (mais relevantes)\n  const camposPrioritarios = [\n    licitacao.objetoCompra,\n    licitacao.informacaoComplementar,\n    licitacao.orgaoEntidade?.razaoSocial,\n    licitacao.unidadeOrgao?.nomeUnidade,\n    licitacao.unidadeOrgao?.municipioNome\n  ];\n\n  for (const campo of camposPrioritarios) {\n    if (campo && normalize(campo).includes(palavraNorm)) {\n      return { encontrou: true, fonte: 'campo_prioritario' };\n    }\n  }\n\n  // 2) Fallback: JSON inteiro (campos não mapeados)\n  const jsonCompleto = normalize(JSON.stringify(licitacao));\n  if (jsonCompleto.includes(palavraNorm)) {\n    return { encontrou: true, fonte: 'json_completo' };\n  }\n\n  return { encontrou: false, fonte: null };\n};\n\nconst buscaParams = $('Gerar Loop Paginas').first().json;\nconst palavrasInclusao = buscaParams.palavras_inclusao || [];\nconst palavrasExclusao = buscaParams.palavras_exclusao || [];\nconst tenantConfig = buscaParams.tenant_config || {};\nconst agora = moment();\n\nconst addSample = (arr, licitacao, extra = {}) => {\n  if (arr.length >= 3) return;\n  arr.push({\n    numeroControlePNCP: licitacao.numeroControlePNCP,\n    situacaoCompraId: licitacao.situacaoCompraId,\n    situacaoCompraNome: licitacao.situacaoCompraNome,\n    dataEncerramentoProposta: licitacao.dataEncerramentoProposta,\n    objetoCompra: (licitacao.objetoCompra || '').slice(0, 160),\n    ...extra,\n  });\n};\n\nlet stats = {\n  paginas_recebidas: $input.all().length,\n  paginas_com_data: 0,\n  paginas_sem_data: 0,\n  total_recebidas: 0,\n  filtradas_situacao: 0,\n  filtradas_data: 0,\n  filtradas_data_invalida: 0,\n  filtradas_palavra: 0,\n  filtradas_exclusao: 0,\n  aprovadas: 0,\n  matches_campo_prioritario: 0,\n  matches_json_completo: 0,\n  matches_por_palavra: {},\n  samples: {\n    situacao: [],\n    data: [],\n    palavra: [],\n    exclusao: [],\n    sem_data: [],\n  }\n};\n\nfor (const item of $input.all()) {\n  const response = item.json;\n\n  if (!Array.isArray(response.data)) {\n    stats.paginas_sem_data++;\n    continue;\n  }\n\n  stats.paginas_com_data++;\n\n  for (const licitacao of response.data) {\n    stats.total_recebidas++;\n\n    // Dados brutos\n    const uf = licitacao.unidadeOrgao?.ufSigla || '';\n    const valorEstimado = licitacao.valorTotalEstimado || 0;\n\n    // Detectar tipo de participação (não filtra aqui; só anota)\n    let tipoParticipacao = 'AMPLA';\n    if (licitacao.srp === true) {\n      tipoParticipacao = 'SRP';\n    }\n    if (licitacao.modalidadeNome && normalize(licitacao.modalidadeNome).includes('me/epp')) {\n      tipoParticipacao = 'ME/EPP';\n    }\n\n    // Filtro 1: Situação\n    if (!SITUACOES_VALIDAS.includes(licitacao.situacaoCompraId)) {\n      stats.filtradas_situacao++;\n      addSample(stats.samples.situacao, licitacao);\n      continue;\n    }\n\n    // Filtro 2: Encerramento no futuro (aplica apenas quando h? data)\n    let dataEncerramento = null;\n    if (licitacao.dataEncerramentoProposta) {\n      dataEncerramento = moment(licitacao.dataEncerramentoProposta);\n      if (!dataEncerramento.isValid()) {\n        stats.filtradas_data_invalida++;\n        addSample(stats.samples.sem_data, licitacao, { motivo: 'dataEncerramentoProposta_invalida' });\n        continue;\n      }\n\n      if (dataEncerramento.isBefore(agora)) {\n        stats.filtradas_data++;\n        addSample(stats.samples.data, licitacao);\n        continue;\n      }\n    }\n\n    // Filtro 3: Palavras de inclusão (OR) - híbrido\n    let temPalavraInclusao = false;\n    let palavraMatch = '';\n    let fonteMatch = '';\n\n    if (palavrasInclusao.length === 0) {\n      temPalavraInclusao = true;\n      palavraMatch = 'SEM_FILTRO';\n      fonteMatch = 'sem_filtro';\n    } else {\n      const palavrasUnicas = [...new Set(palavrasInclusao)];\n      for (const palavra of palavrasUnicas) {\n        const resultado = buscarPalavraHibrido(licitacao, palavra);\n        if (resultado.encontrou) {\n          temPalavraInclusao = true;\n          palavraMatch = palavra;\n          fonteMatch = resultado.fonte;\n\n          stats.matches_por_palavra[palavra] = (stats.matches_por_palavra[palavra] || 0) + 1;\n\n          if (resultado.fonte === 'campo_prioritario') {\n            stats.matches_campo_prioritario++;\n          } else {\n            stats.matches_json_completo++;\n          }\n\n          break;\n        }\n      }\n    }\n\n    if (!temPalavraInclusao) {\n      stats.filtradas_palavra++;\n      addSample(stats.samples.palavra, licitacao);\n      continue;\n    }\n\n    // Filtro 4: Palavras de exclusão (OR) - híbrido\n    let excluir = false;\n    let motivoExclusao = null;\n\n    const exclusaoUnicas = [...new Set(palavrasExclusao)];\n    for (const excl of exclusaoUnicas) {\n      const resultado = buscarPalavraHibrido(licitacao, excl);\n      if (resultado.encontrou) {\n        excluir = true;\n        motivoExclusao = 'palavra_exclusao:' + excl + ' (fonte:' + resultado.fonte + ')';\n        break;\n      }\n    }\n\n    if (excluir) {\n      stats.filtradas_exclusao++;\n      addSample(stats.samples.exclusao, licitacao, { motivo: motivoExclusao });\n      continue;\n    }\n\n    stats.aprovadas++;\n\n    licitacoesFiltradas.push({\n      numero_controle_pncp: licitacao.numeroControlePNCP,\n      ano_compra: licitacao.anoCompra,\n      sequencial_compra: licitacao.sequencialCompra,\n      cnpj_orgao: licitacao.orgaoEntidade?.cnpj,\n      orgao_nome: licitacao.orgaoEntidade?.razaoSocial,\n      objeto_compra: licitacao.objetoCompra,\n      valor_total_estimado: valorEstimado,\n      modalidade_contratacao: licitacao.modalidadeNome,\n      situacao_compra_id: licitacao.situacaoCompraId,\n      situacao_compra_nome: licitacao.situacaoCompraNome,\n      tipo_participacao: tipoParticipacao,\n      data_publicacao: licitacao.dataPublicacaoPncp,\n      data_encerramento_proposta: licitacao.dataEncerramentoProposta,\n      uf: uf,\n      municipio: licitacao.unidadeOrgao?.municipioNome,\n      link_sistema_origem: licitacao.linkSistemaOrigem,\n      passou_pre_triagem: true,\n      motivo_filtro: motivoExclusao,\n      tenant_id: buscaParams.tenant_id,\n      palavra_match: palavraMatch,\n      fonte_match: fonteMatch\n    });\n  }\n}\n\nconsole.log('[BUSCA_PNCP] Filtros (por busca)', {\n  tenant_id: buscaParams.tenant_id,\n  uf: buscaParams.uf,\n  modalidade: buscaParams.modalidade,\n  data_inicial: buscaParams.data_inicial,\n  data_final: buscaParams.data_final,\n  palavras_inclusao_qtd: palavrasInclusao.length,\n  palavras_exclusao_qtd: palavrasExclusao.length,\n  stats,\n  // amostras pequenas para validar motivos de corte\n  samples: stats.samples,\n  // top matches por palavra\n  matches_por_palavra: Object.entries(stats.matches_por_palavra)\n    .sort((a, b) => b[1] - a[1])\n    .slice(0, 10)\n    .reduce((acc, [k, v]) => ({ ...acc, [k]: v }), {}),\n});\n\nif (licitacoesFiltradas.length === 0) {\n  return [{\n    json: {\n      debug: true,\n      stats,\n      busca: {\n        tenant_id: buscaParams.tenant_id,\n        uf: buscaParams.uf,\n        modalidade: buscaParams.modalidade,\n        data_inicial: buscaParams.data_inicial,\n        data_final: buscaParams.data_final,\n      },\n      palavras_inclusao: palavrasInclusao,\n      mensagem: 'Nenhuma licitação passou nos filtros'\n    }\n  }];\n}\n\nreturn licitacoesFiltradas.map(l => ({ json: l }));"
       },
-      "id": "69ed812a-34c3-4735-976a-5827f8669e53",
+      "id": "f2b7476a-6cea-4b11-8d45-59b98a66f58b",
       "name": "Filtrar e Processar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -10960,
-        2208
+        -10736,
+        3136
       ],
       "alwaysOutputData": true
     },
@@ -340,13 +321,13 @@
         "query": "INSERT INTO licitacoes (\n  tenant_id,\n  numero_controle_pncp,\n  ano_compra,\n  sequencial_compra,\n  cnpj_orgao,\n  orgao_nome,\n  objeto_compra,\n  valor_total_estimado,\n  modalidade_contratacao,\n  tipo_participacao,\n  data_publicacao,\n  data_encerramento_proposta,\n  uf,\n  municipio,\n  link_sistema_origem,\n  passou_pre_triagem,\n  motivo_filtro,\n  status\n) VALUES (\n  '{{ $json.tenant_id }}',\n  '{{ $json.numero_controle_pncp }}',\n  {{ $json.ano_compra || 'NULL' }},\n  {{ $json.sequencial_compra || 'NULL' }},\n  '{{ $json.cnpj_orgao }}',\n  '{{ $json.orgao_nome }}',\n  '{{ $json.objeto_compra }}',\n  {{ $json.valor_total_estimado || 0 }},\n  '{{ $json.modalidade_contratacao }}',\n  '{{ $json.tipo_participacao }}',\n  '{{ $json.data_publicacao }}',\n  {{ $json.data_encerramento_proposta ? \"'\" + $json.data_encerramento_proposta + \"'\" : 'NULL' }},\n  '{{ $json.uf }}',\n  '{{ $json.municipio }}',\n  '{{ $json.link_sistema_origem }}',\n  {{ $json.passou_pre_triagem }},\n  {{ $json.motivo_filtro ? \"'\" + $json.motivo_filtro + \"'\" : 'NULL' }},\n  'NOVA'\n)\nON CONFLICT (tenant_id, numero_controle_pncp) DO UPDATE SET\n  ano_compra = EXCLUDED.ano_compra,\n  sequencial_compra = EXCLUDED.sequencial_compra,\n  cnpj_orgao = EXCLUDED.cnpj_orgao,\n  orgao_nome = EXCLUDED.orgao_nome,\n  objeto_compra = EXCLUDED.objeto_compra,\n  valor_total_estimado = EXCLUDED.valor_total_estimado,\n  modalidade_contratacao = EXCLUDED.modalidade_contratacao,\n  tipo_participacao = EXCLUDED.tipo_participacao,\n  data_publicacao = EXCLUDED.data_publicacao,\n  data_encerramento_proposta = EXCLUDED.data_encerramento_proposta,\n  uf = EXCLUDED.uf,\n  municipio = EXCLUDED.municipio,\n  link_sistema_origem = EXCLUDED.link_sistema_origem,\n  passou_pre_triagem = EXCLUDED.passou_pre_triagem,\n  motivo_filtro = EXCLUDED.motivo_filtro\nRETURNING id;",
         "options": {}
       },
-      "id": "7baae694-4d89-42c1-ab52-2df1a6f59050",
+      "id": "e6287cbe-750d-45a9-bfe0-0b1d0180429c",
       "name": "Insert Licitacao",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -10320,
-        2272
+        -10096,
+        3200
       ],
       "alwaysOutputData": true,
       "credentials": {
@@ -359,28 +340,17 @@
     },
     {
       "parameters": {
-        "amount": 0.1
+        "amount": 1
       },
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
       "position": [
-        -10544,
-        2192
+        -10320,
+        3120
       ],
-      "id": "d060db6c-9b24-483a-83e7-8c1eb7eba403",
+      "id": "4ce60bab-7245-4784-9304-3633c6ed3e25",
       "name": "Wait",
       "webhookId": "62dd882c-a907-4665-a237-972a0e0e8a42"
-    },
-    {
-      "parameters": {},
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        -13904,
-        2368
-      ],
-      "id": "79b4961c-a98c-4604-af1d-a0b07fd4e9e9",
-      "name": "When clicking ‘Execute workflow’"
     },
     {
       "parameters": {
@@ -389,10 +359,10 @@
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
       "position": [
-        -11664,
-        2192
+        -11440,
+        3120
       ],
-      "id": "fb124d5a-e531-47eb-ac15-7c04fecef86b",
+      "id": "40089401-90d6-41d6-b599-5180930e7185",
       "name": "Loop Over Items1"
     },
     {
@@ -400,23 +370,23 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        -12112,
-        2192
+        -11888,
+        3120
       ],
-      "id": "a287dbb9-90a1-4e9b-b73b-36954dad790f",
+      "id": "6334186e-bf71-4e29-897e-8bb47de062e5",
       "name": "No Operation, do nothing"
     },
     {
       "parameters": {
-        "jsCode": "/**\n * n8n Code Node (JavaScript)\n * Entrada: vários items (ex: 700), cada um com item.json = objeto\n * Saída: 1 item por lote, contendo items[] com até 30 objetos\n */\n\nconst BATCH_SIZE = 30;\n\n// Pega todos os objetos do fluxo (um por item do n8n)\nconst allObjects = $input.all().map(i => i.json);\n\n// Chunk / split em lotes\nconst batches = [];\nfor (let i = 0; i < allObjects.length; i += BATCH_SIZE) {\n  batches.push(allObjects.slice(i, i + BATCH_SIZE));\n}\n\n// Retorna 1 item por lote\nreturn batches.map((batch, idx) => ({\n  json: {\n    batch_index: idx + 1,\n    total_batches: batches.length,\n    batch_size: BATCH_SIZE,\n    items: batch, // <-- aqui estão os 30 objetos\n  }\n}));\n"
+        "jsCode": "/**\n * n8n Code Node (JavaScript)\n * Entrada: vários items (ex: 700), cada um com item.json = objeto\n * Saída: 1 item por lote, contendo items[] com até 30 objetos\n */\n\nconst BATCH_SIZE = 5;\n\n// Pega todos os objetos do fluxo (um por item do n8n)\nconst allObjects = $input.all().map(i => i.json);\n\n// Chunk / split em lotes\nconst batches = [];\nfor (let i = 0; i < allObjects.length; i += BATCH_SIZE) {\n  batches.push(allObjects.slice(i, i + BATCH_SIZE));\n}\n\n// Retorna 1 item por lote\nreturn batches.map((batch, idx) => ({\n  json: {\n    batch_index: idx + 1,\n    total_batches: batches.length,\n    batch_size: BATCH_SIZE,\n    items: batch, // <-- aqui estão os 30 objetos\n  }\n}));\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -11888,
-        2192
+        -11664,
+        3120
       ],
-      "id": "c5a84e17-3b55-4728-ad40-47c4713ee2bb",
+      "id": "efbab008-8143-42ac-b7fa-f4356be65ef7",
       "name": "agrupar em 30 objetos"
     },
     {
@@ -427,10 +397,10 @@
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
       "position": [
-        -11440,
-        2208
+        -11216,
+        3136
       ],
-      "id": "a02c7d05-e10c-4877-965b-91cef8889421",
+      "id": "b5a33ebd-64cb-4c8d-830f-6fa9f667e16f",
       "name": "Split Out"
     },
     {
@@ -438,10 +408,10 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        -11440,
-        2000
+        -11216,
+        2928
       ],
-      "id": "4cface95-d36b-43e0-b9d3-ccd744b4db44",
+      "id": "4a454073-3044-4a73-96d2-d4b046faf535",
       "name": "No Operation, do nothing1"
     },
     {
@@ -456,7 +426,7 @@
           "conditions": [
             {
               "id": "e9efe285-3a88-4418-9a21-413e51a172d3",
-              "leftValue": "={{ $json.palavra_match }}",
+              "leftValue": "{{ $json.palavra_match }}",
               "rightValue": true,
               "operator": {
                 "type": "string",
@@ -474,35 +444,15 @@
       "type": "n8n-nodes-base.filter",
       "typeVersion": 2.3,
       "position": [
-        -10768,
-        2192
+        -10544,
+        3120
       ],
-      "id": "50bb3dfb-a57f-4620-a8be-a2b18317a739",
+      "id": "ea012f51-3691-4099-abe8-4185b42f257f",
       "name": "Filter",
       "alwaysOutputData": true
     }
   ],
   "connections": {
-    "Start Busca": {
-      "main": [
-        []
-      ]
-    },
-    "Update Busca Progress": {
-      "main": [
-        []
-      ]
-    },
-    "Finish Busca": {
-      "main": [
-        []
-      ]
-    },
-    "Cron Segunda 6h": {
-      "main": [
-        []
-      ]
-    },
     "Webhook Busca PNCP": {
       "main": [
         [
@@ -647,17 +597,6 @@
         ]
       ]
     },
-    "When clicking ‘Execute workflow’": {
-      "main": [
-        [
-          {
-            "node": "Config Tenant",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Loop Over Items1": {
       "main": [
         [
@@ -738,54 +677,36 @@
     }
   },
   "pinData": {
-    "Cron Segunda 6h": [
-      {
-        "timestamp": "2026-01-05T21:58:19.051-03:00",
-        "Readable date": "January 5th 2026, 9:58:19 pm",
-        "Readable time": "9:58:19 pm",
-        "Day of week": "Monday",
-        "Year": "2026",
-        "Month": "January",
-        "Day of month": "05",
-        "Hour": "21",
-        "Minute": "58",
-        "Second": "19",
-        "Timezone": "America/Sao_Paulo (UTC-03:00)"
-      }
-    ],
     "Webhook Busca PNCP": [
       {
         "headers": {
           "host": "n8n-n8n-start.jz9bd8.easypanel.host",
           "user-agent": "node",
-          "content-length": "274",
+          "content-length": "272",
           "accept": "*/*",
           "accept-encoding": "br, gzip, deflate",
           "accept-language": "*",
-          "authorization": "Bearer n8n_3kQmP7A2ZxYv9B5R0eJrCwF6S4uH8LqM1KDV+o=",
+          "authorization": "Bearer sua-chave-secreta-n8n",
           "content-type": "application/json",
           "sec-fetch-mode": "cors",
           "x-forwarded-for": "172.18.0.1",
           "x-forwarded-host": "n8n-n8n-start.jz9bd8.easypanel.host",
           "x-forwarded-port": "443",
           "x-forwarded-proto": "https",
-          "x-forwarded-server": "67ae9cdeab89",
+          "x-forwarded-server": "97a667cc6cbc",
           "x-real-ip": "172.18.0.1"
         },
         "params": {},
         "query": {},
         "body": {
-          "tenant_id": "55a04791-16cf-48ee-a8eb-e1180dbf6ea1",
-          "execution_id": "adbd894b-4203-4441-beab-d9b748e77028",
-          "callback_url": "https://evolution-licitaai.jz9bd8.easypanel.host//api/n8n/callback",
-          "progress_url": "https://evolution-licitaai.jz9bd8.easypanel.host//api/n8n/progress"
+          "tenant_id": "0161fa75-225b-473b-8e63-3c4c1f5456d7",
+          "execution_id": "2fe788e2-5bdb-4d64-98f6-55c8e2ae3547",
+          "callback_url": "https://evolution-licitaai.jz9bd8.easypanel.host/api/n8n/callback",
+          "progress_url": "https://evolution-licitaai.jz9bd8.easypanel.host/api/n8n/progress"
         },
         "webhookUrl": "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/busca-pncp",
         "executionMode": "production"
       }
-    ],
-    "When clicking ‘Execute workflow’": [
-      {}
     ]
   },
   "meta": {
