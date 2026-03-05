@@ -1,5 +1,6 @@
 import { query, queryOne } from "@/lib/db";
-import { triggerBusca, triggerAnalise, type BuscaConfig } from "@/lib/n8n/client";
+import { triggerAnalise } from "@/lib/n8n/client";
+import { executarBusca } from "@/lib/pncp/search";
 import { NextRequest, NextResponse } from "next/server";
 
 // This endpoint is called by an external cron (Vercel Cron, EasyPanel cron, etc.)
@@ -64,43 +65,16 @@ export async function GET(req: NextRequest) {
 
     try {
       if (schedule.workflow === "BUSCA_PNCP") {
-        // Load tenant search configuration
-        const buscaConfigRow = await queryOne<{
-          ufs: string[] | null;
-          modalidades_contratacao: string[] | null;
-          dias_retroativos: number | null;
-          valor_minimo: number | null;
-          valor_maximo: number | null;
-        }>(
-          `SELECT ufs, modalidades_contratacao, dias_retroativos, valor_minimo, valor_maximo
-           FROM configuracoes_busca WHERE tenant_id = $1`,
-          [schedule.tenant_id]
-        );
-
-        const buscaConfig: BuscaConfig = {
-          ufs: buscaConfigRow?.ufs || undefined,
-          modalidades_contratacao: buscaConfigRow?.modalidades_contratacao || undefined,
-          dias_retroativos: buscaConfigRow?.dias_retroativos || undefined,
-          valor_minimo: buscaConfigRow?.valor_minimo || undefined,
-          valor_maximo: buscaConfigRow?.valor_maximo || undefined,
-        };
-
         // Create execution record
         const execution = await queryOne<{ id: string }>(
           `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
-           VALUES ($1, 'busca', 'PENDING', NULL, 'Iniciando busca no PNCP (cron)...', $2)
+           VALUES ($1, 'busca', 'RUNNING', NULL, 'Iniciando busca PNCP (code)...', $2)
            RETURNING id`,
-          [schedule.tenant_id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo cron", level: "info", config: buscaConfig }])]
+          [schedule.tenant_id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo cron (code)", level: "info" }])]
         );
 
-        // Trigger n8n webhook with execution_id + search config
-        await triggerBusca(schedule.tenant_id, execution?.id, buscaConfig);
-
-        // Update to RUNNING
-        await query(
-          `UPDATE workflow_executions SET status = 'RUNNING', current_step = 'Conectando ao PNCP...' WHERE id = $1`,
-          [execution?.id]
-        );
+        // Execute search directly (no N8N dependency)
+        await executarBusca(schedule.tenant_id, execution?.id);
       } else if (schedule.workflow === "ANALISE_EDITAIS") {
         // Create execution record
         const execution = await queryOne<{ id: string }>(

@@ -3,7 +3,7 @@ import { query, queryOne } from "@/lib/db";
 import { executarBusca } from "@/lib/pncp/search";
 import { NextResponse } from "next/server";
 
-export const maxDuration = 300; // 5 min
+export const maxDuration = 300; // 5 min for Vercel
 
 export async function POST() {
   const session = await auth();
@@ -42,7 +42,7 @@ export async function POST() {
       }
     );
 
-    // Trigger callback for slug generation etc.
+    // Send callback to update statuses (reuse existing callback logic)
     if (result.success) {
       await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/n8n/callback`, {
         method: "POST",
