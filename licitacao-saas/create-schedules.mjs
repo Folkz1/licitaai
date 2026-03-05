@@ -1,4 +1,5 @@
-const { Pool } = require('pg');
+import pg from 'pg';
+const { Pool } = pg;
 const pool = new Pool({ connectionString: 'postgres://postgres:6e0c28919d0e71a5d464@jz9bd8.easypanel.host:5000/evolution?sslmode=disable' });
 
 const tenantId = '5d9b7245-d875-428d-9d62-3a302494753f';
