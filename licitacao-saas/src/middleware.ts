@@ -4,8 +4,22 @@ import type { NextRequest } from "next/server";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
+  // Check for session token cookie (NextAuth sets this)
+  const token =
+    req.cookies.get("__Secure-authjs.session-token") ||
+    req.cookies.get("authjs.session-token") ||
+    req.cookies.get("next-auth.session-token") ||
+    req.cookies.get("__Secure-next-auth.session-token");
+
+  // Logged-in user on "/" → redirect to dashboard
+  if (pathname === "/" && token) {
+    return NextResponse.redirect(new URL("/dashboard", req.url));
+  }
+
   // Public routes - skip auth check
   if (
+    pathname === "/" ||
+    pathname.startsWith("/editais") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/p/") ||
@@ -15,17 +29,11 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/api/onboarding/") ||
     pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
+    pathname === "/favicon.ico" ||
+    pathname === "/sitemap.xml"
   ) {
     return NextResponse.next();
   }
-
-  // Check for session token cookie (NextAuth sets this)
-  const token =
-    req.cookies.get("__Secure-authjs.session-token") ||
-    req.cookies.get("authjs.session-token") ||
-    req.cookies.get("next-auth.session-token") ||
-    req.cookies.get("__Secure-next-auth.session-token");
 
   if (!token) {
     if (pathname.startsWith("/api/")) {
