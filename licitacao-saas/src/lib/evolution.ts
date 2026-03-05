@@ -1,6 +1,6 @@
 const EVOLUTION_URL = process.env.EVOLUTION_API_URL || "https://apps-evolution-api.klx2s6.easypanel.host";
 const EVOLUTION_KEY = process.env.EVOLUTION_API_KEY || "CD6D2B1F7373-4086-AAC9-53391CF245E8";
-const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || "guyfolkz";
+const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE || "guyfolkiz";
 
 export async function sendWhatsApp(number: string, message: string): Promise<boolean> {
   try {
