@@ -12,7 +12,6 @@ interface SortablePipelineColumnProps {
   items: PipelineItem[];
   collapsed: boolean;
   onToggleCollapse: (key: string) => void;
-  loading?: boolean;
   onMoveToPhase: (id: string, phase: string) => void;
   onReject: (id: string) => void;
   onOpenNote: (id: string, phase: string) => void;
@@ -24,7 +23,6 @@ export function SortablePipelineColumn({
   items,
   collapsed,
   onToggleCollapse,
-  loading,
   onMoveToPhase,
   onReject,
   onOpenNote,

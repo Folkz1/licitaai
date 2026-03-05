@@ -10,7 +10,6 @@ import {
   Users,
   FileText,
   CheckCircle,
-  XCircle,
   Edit2,
   Trash2,
   Search,
@@ -45,10 +44,6 @@ export default function AdminTenantsPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    fetchTenants();
-  }, []);
-
   async function fetchTenants() {
     setLoading(true);
     try {
@@ -61,6 +56,9 @@ export default function AdminTenantsPage() {
     }
     setLoading(false);
   }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchTenants(); }, []);
 
   async function handleSave() {
     if (!form.nome.trim()) {

@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import type { Session } from "next-auth";
 import { auth } from "./auth";
 
 /**
@@ -6,11 +7,10 @@ import { auth } from "./auth";
  * For SUPER_ADMIN users, checks the x-tenant-override cookie.
  * For all other users, returns their own tenant ID.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getEffectiveTenantId(): Promise<{
   tenantId: string;
   isOverride: boolean;
-  session: any;
+  session: Session;
 }> {
   const session = await auth();
   if (!session) throw new Error("Unauthorized");

@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Check, Building2, Briefcase, Package, Settings, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import Step1Empresa from './components/Step1Empresa';
@@ -40,23 +39,16 @@ export default function OnboardingPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  // Buscar sessão existente
-  useEffect(() => {
-    fetchSession();
-  }, []);
-
-  const fetchSession = async () => {
+  const fetchSession = useCallback(async () => {
     try {
       const res = await fetch('/api/onboarding/session');
       if (res.ok) {
         const data = await res.json();
         setSession(data.session);
-        // Se já completou, redirecionar
         if (data.isCompleted) {
           router.push('/dashboard');
           return;
         }
-        // Restaurar passo atual
         if (data.session?.current_step) {
           setCurrentStep(Math.max(0, data.session.current_step - 1));
         }
@@ -66,7 +58,9 @@ export default function OnboardingPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router]);
+
+  useEffect(() => { fetchSession(); }, [fetchSession]);
 
   const saveStep = useCallback(async (step: number, data: Record<string, unknown>) => {
     setIsSaving(true);

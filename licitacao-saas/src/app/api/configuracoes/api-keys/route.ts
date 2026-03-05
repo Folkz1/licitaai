@@ -1,6 +1,6 @@
 import { query, queryOne } from "@/lib/db";
 import { getEffectiveTenantId } from "@/lib/tenant";
-import { generateApiKey, hashApiKey } from "@/lib/api-key";
+import { generateApiKey } from "@/lib/api-key";
 import { NextRequest, NextResponse } from "next/server";
 
 // List API keys for current tenant

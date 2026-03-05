@@ -16,7 +16,6 @@ import {
   Users,
   Search,
   CheckCircle,
-  XCircle,
   AlertCircle,
   Shield,
   Eye,
@@ -71,10 +70,6 @@ export default function AdminUsersPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
   async function fetchData() {
     setLoading(true);
     try {
@@ -91,6 +86,9 @@ export default function AdminUsersPage() {
     }
     setLoading(false);
   }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchData(); }, []);
 
   async function handleSave() {
     if (!form.name.trim() || !form.email.trim()) {

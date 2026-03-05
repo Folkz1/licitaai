@@ -323,10 +323,6 @@ export default function ConfiguracoesPage() {
   const [editingConfig, setEditingConfig] = useState<Partial<SearchConfig> | null>(null);
   const [showConfigForm, setShowConfigForm] = useState(false);
 
-  useEffect(() => {
-    fetchAll();
-  }, []);
-
   async function fetchAll() {
     setLoading(true);
     const [configRes, schedulesRes, buscaRes] = await Promise.all([
@@ -352,6 +348,9 @@ export default function ConfiguracoesPage() {
     }
     setLoading(false);
   }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchAll(); }, []);
 
   async function refreshKeywords() {
     const res = await fetch("/api/configuracoes");

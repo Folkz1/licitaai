@@ -79,3 +79,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 >>>>>>> master
+check_db_status.py
+GEMINI_SMOKE.md
+test-prod.mjs

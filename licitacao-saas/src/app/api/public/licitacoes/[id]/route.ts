@@ -1,4 +1,4 @@
-import { query, queryOne } from "@/lib/db";
+import { queryOne } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
 // Public API - returns LIMITED licitação data for shareable pages
@@ -79,6 +79,7 @@ export async function GET(
   }
 
   // Remove tenant_id from response
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { tenant_id: _tid, ...publicLicitacao } = licitacao;
 
   return NextResponse.json({

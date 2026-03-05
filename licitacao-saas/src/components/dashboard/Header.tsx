@@ -1,7 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -65,15 +65,22 @@ export function Header({ user }: HeaderProps) {
     }
   }, [isSuperAdmin]);
 
-  function handleTenantSwitch(tenant: Tenant) {
+  const [pendingSwitch, setPendingSwitch] = useState<Tenant | null>(null);
+
+  const handleTenantSwitch = useCallback((tenant: Tenant) => {
     setActiveTenantId(tenant.id);
     setActiveTenantName(tenant.nome);
     setTenantMenuOpen(false);
+    setPendingSwitch(tenant);
+  }, []);
+
+  useEffect(() => {
+    if (!pendingSwitch) return;
     // Store in cookie so API routes can read it
-    document.cookie = `x-tenant-override=${tenant.id};path=/;max-age=${60 * 60 * 24}`;
+    document.cookie = `x-tenant-override=${pendingSwitch.id};path=/;max-age=${60 * 60 * 24}`;
     // Reload to apply new tenant context
     window.location.reload();
-  }
+  }, [pendingSwitch]);
 
   return (
     <header className="flex h-14 items-center justify-between border-b border-slate-800/60 bg-slate-950/50 px-6">

@@ -9,7 +9,6 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import {
   Loader2,
@@ -54,6 +53,7 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
   const [recent, setRecent] = useState<Execution[]>([]);
   const [expandedLogs, setExpandedLogs] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [fetchedAt, setFetchedAt] = useState(0);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -74,13 +74,14 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
         }
       }
 
+      setFetchedAt(Date.now());
       setActive(data.active || []);
       setRecent(data.recent || []);
     } catch { /* ignore */ }
   }, [active, onBuscaComplete, onAnaliseComplete]);
 
   useEffect(() => {
-    fetchStatus();
+    fetchStatus(); // eslint-disable-line react-hooks/set-state-in-effect -- initial data fetch
     const interval = setInterval(fetchStatus, 3000); // Poll every 3s
     return () => clearInterval(interval);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -108,7 +109,7 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
 
   function formatDuration(start: string, end: string | null) {
     const s = new Date(start).getTime();
-    const e = end ? new Date(end).getTime() : Date.now();
+    const e = end ? new Date(end).getTime() : fetchedAt;
     const diff = Math.floor((e - s) / 1000);
     if (diff < 60) return `${diff}s`;
     return `${Math.floor(diff / 60)}m ${diff % 60}s`;

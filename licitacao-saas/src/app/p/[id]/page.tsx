@@ -1,4 +1,4 @@
-import { queryOne, query } from "@/lib/db";
+import { queryOne } from "@/lib/db";
 import { Metadata } from "next";
 import { PublicLicitacaoView } from "./PublicView";
 

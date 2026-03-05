@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
-import { query, queryOne } from '@/lib/db';
+import { queryOne } from '@/lib/db';
 
 // Tipo comum para sessão de onboarding
 type OnboardingSession = {

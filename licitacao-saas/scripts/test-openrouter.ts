@@ -9,7 +9,7 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 function extractJSON(text: string) {
   try {
     return JSON.parse(text);
-  } catch (e) {
+  } catch (_e) {
     const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (match && match[1]) {
       try {
@@ -57,8 +57,8 @@ async function testOpenRouter() {
     try {
       const res = extractJSON(t);
       console.log(`Test ${i + 1} passed:`, res);
-    } catch (e: any) {
-      console.log(`Test ${i + 1} failed:`, e.message);
+    } catch (e: unknown) {
+      console.log(`Test ${i + 1} failed:`, e instanceof Error ? e.message : String(e));
     }
   });
   console.log('--- End of extractJSON tests ---\n');
@@ -97,7 +97,7 @@ Responda APENAS em JSON válido no seguinte formato:
     });
     console.log('Response:', text);
     try {
-      const json = JSON.parse(text);
+      JSON.parse(text);
       console.log('Successfully parsed JSON!');
     } catch (e) {
       console.log('Failed to parse JSON directly. This is a potential bug in the API route.');

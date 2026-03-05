@@ -56,6 +56,9 @@ async function testOnboarding() {
       "SELECT u.id, u.email, u.tenant_id, t.nome as tenant_nome FROM users u JOIN tenants t ON t.id = u.tenant_id LIMIT 1"
     );
     
+    let testEmail: string;
+    let testPassword: string;
+
     if (userResult.rows.length === 0) {
       console.log("Nenhum usuário encontrado! Criando...");
       // Criar tenant e usuário
@@ -64,27 +67,27 @@ async function testOnboarding() {
       );
       const tenantId = tenantResult.rows[0].id;
       const passwordHash = await hash("teste123", 12);
-      
+
       await pool.query(
         "INSERT INTO users (tenant_id, email, nome, password_hash, role) VALUES ($1, $2, $3, $4, $5)",
         [tenantId, "teste@exemplo.com", "Usuario Teste", passwordHash, "ADMIN"]
       );
-      
+
       console.log("Usuário criado: teste@exemplo.com / teste123");
-      
-      var testEmail = "teste@exemplo.com";
-      var testPassword = "teste123";
+
+      testEmail = "teste@exemplo.com";
+      testPassword = "teste123";
     } else {
       const user = userResult.rows[0];
       console.log(`Usuário encontrado: ${user.email} (tenant: ${user.tenant_nome})`);
-      var testEmail = user.email;
+      testEmail = user.email;
       // Preciso criar senha para esse usuário se não tiver
       const passwordHash = await hash("teste123", 12);
       await pool.query(
         "UPDATE users SET password_hash = $1 WHERE email = $2",
         [passwordHash, testEmail]
       );
-      var testPassword = "teste123";
+      testPassword = "teste123";
     }
 
     // 2. Login para obter sessão

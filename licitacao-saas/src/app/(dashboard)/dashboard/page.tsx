@@ -2,17 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { WorkflowMonitor } from "@/components/dashboard/WorkflowMonitor";
 import {
   FileText,
   TrendingUp,
   DollarSign,
   CheckCircle2,
-  Clock,
   AlertTriangle,
   ArrowRight,
-  Eye,
   Flame,
   Activity,
   BarChart3,
@@ -30,8 +27,6 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   AreaChart,
   Area,
 } from "recharts";
@@ -96,10 +91,6 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(value);
 }
 
-function formatCurrencyFull(value: number) {
-  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(value);
-}
-
 function daysUntil(date: string) {
   if (!date) return null;
   return Math.ceil((new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -108,10 +99,6 @@ function daysUntil(date: string) {
 export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetchStats();
-  }, []);
 
   async function fetchStats() {
     setLoading(true);
@@ -124,6 +111,9 @@ export default function DashboardPage() {
     }
     setLoading(false);
   }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchStats(); }, []);
 
   if (loading || !stats) {
     return (

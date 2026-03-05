@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -158,12 +157,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchDetail();
-    fetchHistory();
-  }, [id]);
-
-  async function fetchDetail() {
+  const fetchDetail = useCallback(async () => {
     setLoading(true);
     const res = await fetch(`/api/licitacoes/${id}`);
     const data = await res.json();
@@ -171,13 +165,16 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
     setAnalise(data.analise);
     setItens(data.itens || []);
     setLoading(false);
-  }
+  }, [id]);
 
-  async function fetchHistory() {
+  const fetchHistory = useCallback(async () => {
     const res = await fetch(`/api/licitacoes/${id}/notes`);
     const data = await res.json();
     setHistory(data);
-  }
+  }, [id]);
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchDetail(); fetchHistory(); }, [id, fetchDetail, fetchHistory]);
 
   async function handleAction(action: string, toPhase?: string) {
     await fetch(`/api/licitacoes/${id}/status`, {

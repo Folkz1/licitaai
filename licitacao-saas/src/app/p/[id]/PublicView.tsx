@@ -80,6 +80,7 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string; bg: string
   P3: { label: "Prioridade Baixa", color: "text-blue-400", bg: "bg-blue-500/20 border-blue-500/30" },
 };
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function PublicLicitacaoView({ licitacao: lic, analise, itemCount, itemValorTotal }: Props) {
   const [copied, setCopied] = useState(false);
   const days = daysUntil(lic.data_encerramento_proposta);

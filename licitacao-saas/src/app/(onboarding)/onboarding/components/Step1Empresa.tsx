@@ -32,7 +32,6 @@ export default function Step1Empresa({
   data,
   onNext,
   isLoading,
-  isFirstStep,
 }: Step1EmpresaProps) {
   const [formData, setFormData] = useState({
     razao_social: (data?.razao_social as string) || '',

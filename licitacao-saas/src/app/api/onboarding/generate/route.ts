@@ -122,7 +122,7 @@ function extractJSON(text: string) {
   try {
     // 1. Tentar parse direto
     return JSON.parse(text);
-  } catch (e) {
+  } catch {
     // 2. Tentar extrair de blocos de código markdown ```json ... ```
     const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
     if (match && match[1]) {
@@ -148,7 +148,8 @@ function extractJSON(text: string) {
   }
 }
 
-export async function POST(request: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function POST(_request: NextRequest) {
   try {
     const session = await auth();
     
@@ -287,8 +288,8 @@ export async function POST(request: NextRequest) {
          WHERE id = $2`,
         [JSON.stringify(config), onboardingSession.id]
       );
-    } catch (e) {
-      console.error('[ONBOARDING_GEN] Erro ao parsear/salvar configuração:', e);
+    } catch (_e) {
+      console.error('[ONBOARDING_GEN] Erro ao parsear/salvar configuração:', _e);
       // Se falhar o parse da IA, fazemos um fallback para o template (melhor que 500)
       config = generateTemplateConfig(context);
     }

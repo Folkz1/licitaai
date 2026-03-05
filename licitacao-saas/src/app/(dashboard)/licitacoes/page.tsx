@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -251,9 +250,8 @@ export default function LicitacoesPage() {
     [filters],
   );
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   function handleSearchChange(value: string) {
     setFilters((f) => ({ ...f, search: value }));

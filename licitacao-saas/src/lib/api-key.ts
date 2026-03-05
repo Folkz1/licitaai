@@ -194,7 +194,7 @@ export async function trackApiUsage(
   const creditsConsumed = parseFloat(pricing?.credits_per_call || "1");
 
   // Consume credits
-  const consumed = await queryOne<{ result: boolean }>(
+  await queryOne<{ result: boolean }>(
     "SELECT consume_api_credits($1, $2) as result",
     [ctx.tenantId, creditsConsumed]
   );
