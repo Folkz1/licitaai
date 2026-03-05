@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, use, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,6 @@ import {
   Download,
   Globe,
 } from "lucide-react";
-import Link from "next/link";
 
 interface LicitacaoDetail {
   id: string;
@@ -149,6 +149,7 @@ function buildEditalDownloadUrl(ncp: string) {
 
 export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  const router = useRouter();
   const [lic, setLic] = useState<LicitacaoDetail | null>(null);
   const [analise, setAnalise] = useState<Analise | null>(null);
   const [itens, setItens] = useState<Item[]>([]);
@@ -232,9 +233,9 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
     <div className="space-y-6">
       {/* Back + Actions */}
       <div className="flex items-center justify-between">
-        <Link href="/licitacoes" className="flex items-center gap-2 text-slate-400 hover:text-white">
+        <button onClick={() => router.back()} className="flex items-center gap-2 text-slate-400 hover:text-white">
           <ArrowLeft className="h-4 w-4" /> Voltar
-        </Link>
+        </button>
         <div className="flex gap-2">
           {nextPhase && (
             <Button

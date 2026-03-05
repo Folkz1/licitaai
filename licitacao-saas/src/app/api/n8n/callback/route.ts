@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
   // Auto-advance review_phase based on analysis results
   // P1/P2 analyzed → PRE_TRIAGEM, PRE_TRIAGEM_REJEITAR → REJEITADA
   if (workflow === "ANALISE_EDITAIS" && (status === "OK" || status === "SUCCESS") && tenant_id) {
+    // Only mark as ANALISADA if analysis has actual content (justificativa non-empty)
     await query(
       `UPDATE licitacoes l
        SET status = 'ANALISADA',
@@ -78,7 +79,9 @@ export async function POST(req: NextRequest) {
        FROM analises a
        WHERE a.licitacao_id = l.id
          AND l.tenant_id = $1
-         AND l.status <> 'ANALISADA'`,
+         AND l.status <> 'ANALISADA'
+         AND a.justificativa IS NOT NULL
+         AND a.justificativa <> ''`,
       [tenant_id]
     );
     await query(

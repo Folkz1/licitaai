@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -203,31 +203,57 @@ function getUrgencyConfig(days: number | null) {
   };
 }
 
+const PAGE_SIZE_OPTIONS = [20, 50, 100];
+const DEFAULT_PAGE_SIZE = 50;
+
 export default function LicitacoesPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Initialize state from URL params (preserves state on back navigation)
   const [data, setData] = useState<Licitacao[]>([]);
   const [pagination, setPagination] = useState<Pagination>({
-    page: 1,
-    limit: 20,
+    page: parseInt(searchParams.get("page") || "1"),
+    limit: parseInt(searchParams.get("limit") || String(DEFAULT_PAGE_SIZE)),
     total: 0,
     totalPages: 0,
   });
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
-    status: "",
-    phase: "",
-    uf: "",
-    search: "",
-    priority: "",
-    deadlineUntil: "",
+    status: searchParams.get("status") || "",
+    phase: searchParams.get("phase") || "",
+    uf: searchParams.get("uf") || "",
+    search: searchParams.get("search") || "",
+    priority: searchParams.get("priority") || "",
+    deadlineUntil: searchParams.get("deadline_until") || "",
   });
+  const [pageSize, setPageSize] = useState(
+    parseInt(searchParams.get("limit") || String(DEFAULT_PAGE_SIZE))
+  );
   const [showFilters, setShowFilters] = useState(true);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+
+  // Sync state to URL (so back button preserves page/filters)
+  const syncUrl = useCallback((page: number, currentFilters: typeof filters, limit: number) => {
+    const params = new URLSearchParams();
+    if (page > 1) params.set("page", String(page));
+    if (limit !== DEFAULT_PAGE_SIZE) params.set("limit", String(limit));
+    if (currentFilters.status) params.set("status", currentFilters.status);
+    if (currentFilters.phase) params.set("phase", currentFilters.phase);
+    if (currentFilters.uf) params.set("uf", currentFilters.uf);
+    if (currentFilters.search) params.set("search", currentFilters.search);
+    if (currentFilters.priority) params.set("priority", currentFilters.priority);
+    if (currentFilters.deadlineUntil) params.set("deadline_until", currentFilters.deadlineUntil);
+    const qs = params.toString();
+    const newUrl = qs ? `${pathname}?${qs}` : pathname;
+    window.history.replaceState(null, "", newUrl);
+  }, [pathname]);
 
   const fetchData = useCallback(
     async (page = 1) => {
       setLoading(true);
-      const params = new URLSearchParams({ page: String(page), limit: "20" });
+      const params = new URLSearchParams({ page: String(page), limit: String(pageSize) });
       if (filters.status) params.set("status", filters.status);
       if (filters.phase) params.set("phase", filters.phase);
       if (filters.uf) params.set("uf", filters.uf);
@@ -235,23 +261,25 @@ export default function LicitacoesPage() {
       if (filters.priority) params.set("priority", filters.priority);
       if (filters.deadlineUntil) params.set("deadline_until", filters.deadlineUntil);
 
+      syncUrl(page, filters, pageSize);
+
       try {
         const res = await fetch(`/api/licitacoes?${params}`);
         const json = await res.json();
         setData(json.data || []);
         setPagination(
-          json.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 },
+          json.pagination || { page: 1, limit: pageSize, total: 0, totalPages: 0 },
         );
       } catch {
         setData([]);
       }
       setLoading(false);
     },
-    [filters],
+    [filters, pageSize, syncUrl],
   );
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchData(pagination.page); }, [fetchData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleSearchChange(value: string) {
     setFilters((f) => ({ ...f, search: value }));
@@ -649,16 +677,34 @@ export default function LicitacoesPage() {
       {/* Pagination */}
       {pagination.totalPages > 1 && (
         <div className="flex items-center justify-between rounded-xl border border-slate-800/40 bg-slate-900/30 px-4 py-3">
-          <p className="text-sm text-slate-500">
-            Pagina{" "}
-            <span className="text-white font-medium">{pagination.page}</span> de{" "}
-            <span className="text-white font-medium">
-              {pagination.totalPages}
-            </span>
-            <span className="text-slate-600 ml-2">
-              ({pagination.total} resultados)
-            </span>
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-slate-500">
+              Pagina{" "}
+              <span className="text-white font-medium">{pagination.page}</span> de{" "}
+              <span className="text-white font-medium">
+                {pagination.totalPages}
+              </span>
+              <span className="text-slate-600 ml-2">
+                ({pagination.total} resultados)
+              </span>
+            </p>
+            <Select
+              value={String(pageSize)}
+              onValueChange={(v) => {
+                setPageSize(Number(v));
+                setPagination(p => ({ ...p, page: 1 }));
+              }}
+            >
+              <SelectTrigger className="w-24 h-8 border-slate-700/50 bg-slate-800/50 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="border-slate-700 bg-slate-800">
+                {PAGE_SIZE_OPTIONS.map(size => (
+                  <SelectItem key={size} value={String(size)}>{size} / pag</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="flex items-center gap-1">
             <Button
               variant="outline"

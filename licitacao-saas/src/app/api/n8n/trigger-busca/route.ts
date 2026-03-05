@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
-import { triggerBusca } from "@/lib/n8n/client";
+import { triggerBusca, type BuscaConfig } from "@/lib/n8n/client";
 import { NextResponse } from "next/server";
 
 export async function POST() {
@@ -12,7 +12,7 @@ export async function POST() {
 
     // Check if there's already a running busca for this tenant
     const running = await queryOne(
-      `SELECT id FROM workflow_executions 
+      `SELECT id FROM workflow_executions
        WHERE tenant_id = $1 AND workflow_type = 'busca' AND status IN ('PENDING', 'RUNNING')`,
       [tenantId]
     );
@@ -20,16 +20,37 @@ export async function POST() {
       return NextResponse.json({ error: "Já existe uma busca em andamento" }, { status: 409 });
     }
 
+    // Load tenant search configuration (UFs, modalidades, etc.)
+    const config = await queryOne<{
+      ufs: string[] | null;
+      modalidades_contratacao: string[] | null;
+      dias_retroativos: number | null;
+      valor_minimo: number | null;
+      valor_maximo: number | null;
+    }>(
+      `SELECT ufs, modalidades_contratacao, dias_retroativos, valor_minimo, valor_maximo
+       FROM configuracoes_busca WHERE tenant_id = $1`,
+      [tenantId]
+    );
+
+    const buscaConfig: BuscaConfig = {
+      ufs: config?.ufs || undefined,
+      modalidades_contratacao: config?.modalidades_contratacao || undefined,
+      dias_retroativos: config?.dias_retroativos || undefined,
+      valor_minimo: config?.valor_minimo || undefined,
+      valor_maximo: config?.valor_maximo || undefined,
+    };
+
     // Create execution record
     const execution = await queryOne<{ id: string }>(
       `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
        VALUES ($1, 'busca', 'PENDING', $2, 'Iniciando busca no PNCP...', $3)
        RETURNING id`,
-      [tenantId, session.user.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo dashboard", level: "info" }])]
+      [tenantId, session.user.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo dashboard", level: "info", config: buscaConfig }])]
     );
 
-    // Trigger n8n webhook with execution_id
-    const result = await triggerBusca(tenantId, execution?.id);
+    // Trigger n8n webhook with execution_id + search config
+    const result = await triggerBusca(tenantId, execution?.id, buscaConfig);
 
     // Update to RUNNING
     await query(

@@ -21,12 +21,25 @@ async function callWebhook(url: string, body: Record<string, unknown>) {
   return res.json();
 }
 
-export async function triggerBusca(tenantId: string, executionId?: string) {
+export interface BuscaConfig {
+  ufs?: string[];
+  modalidades_contratacao?: string[];
+  dias_retroativos?: number;
+  valor_minimo?: number;
+  valor_maximo?: number;
+}
+
+export async function triggerBusca(tenantId: string, executionId?: string, config?: BuscaConfig) {
   return callWebhook(N8N_WEBHOOK_BUSCA, {
     tenant_id: tenantId,
     execution_id: executionId,
     callback_url: `${APP_URL}/api/n8n/callback`,
     progress_url: `${APP_URL}/api/n8n/progress`,
+    ...(config?.ufs?.length ? { ufs: config.ufs } : {}),
+    ...(config?.modalidades_contratacao?.length ? { modalidades_contratacao: config.modalidades_contratacao } : {}),
+    ...(config?.dias_retroativos ? { dias_retroativos: config.dias_retroativos } : {}),
+    ...(config?.valor_minimo ? { valor_minimo: config.valor_minimo } : {}),
+    ...(config?.valor_maximo ? { valor_maximo: config.valor_maximo } : {}),
   });
 }
 
