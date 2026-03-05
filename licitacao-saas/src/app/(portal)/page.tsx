@@ -25,11 +25,17 @@ export default async function PortalHomePage() {
     total: string;
     ufs: string;
     valor_total: string;
+    analisadas: string;
+    tenants_ativos: string;
+    ultima_atualizacao: string;
   }>(
     `SELECT
       COUNT(*)::TEXT as total,
       COUNT(DISTINCT uf)::TEXT as ufs,
-      COALESCE(SUM(valor_total_estimado), 0)::TEXT as valor_total
+      COALESCE(SUM(valor_total_estimado), 0)::TEXT as valor_total,
+      COUNT(*) FILTER (WHERE COALESCE(analysis_count, 0) > 0)::TEXT as analisadas,
+      (SELECT COUNT(DISTINCT tenant_id)::TEXT FROM licitacoes WHERE tenant_id IS NOT NULL) as tenants_ativos,
+      TO_CHAR(MAX(created_at), 'DD/MM HH24:MI') as ultima_atualizacao
     FROM licitacoes`
   );
 
@@ -61,6 +67,9 @@ export default async function PortalHomePage() {
   const totalNum = parseInt(stats?.total || "0");
   const ufsNum = parseInt(stats?.ufs || "0");
   const valorTotal = parseFloat(stats?.valor_total || "0");
+  const analisadasNum = parseInt(stats?.analisadas || "0");
+  const tenantsNum = parseInt(stats?.tenants_ativos || "0");
+  const ultimaAtualizacao = stats?.ultima_atualizacao || "";
 
   function formatCompactValue(v: number) {
     if (v >= 1_000_000_000) return `R$ ${(v / 1_000_000_000).toFixed(1)}B`;
@@ -78,7 +87,7 @@ export default async function PortalHomePage() {
         <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6">
           <Badge className="mb-6 bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/10">
             <Sparkles className="mr-1.5 h-3.5 w-3.5" />
-            Dados públicos do PNCP atualizados diariamente
+            Dados do PNCP atualizados diariamente{ultimaAtualizacao ? ` (último: ${ultimaAtualizacao})` : ""}
           </Badge>
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
             <span className="bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
@@ -113,7 +122,7 @@ export default async function PortalHomePage() {
           </form>
 
           {/* Stats */}
-          <div className="mt-12 grid grid-cols-3 gap-6 max-w-lg mx-auto">
+          <div className="mt-12 grid grid-cols-3 gap-6 max-w-2xl mx-auto sm:grid-cols-5">
             <div>
               <p className="text-2xl font-bold text-white sm:text-3xl">
                 {totalNum.toLocaleString("pt-BR")}
@@ -130,6 +139,22 @@ export default async function PortalHomePage() {
               </p>
               <p className="text-xs text-slate-500 mt-1">Valor Total</p>
             </div>
+            {analisadasNum > 0 && (
+              <div>
+                <p className="text-2xl font-bold text-indigo-400 sm:text-3xl">
+                  {analisadasNum.toLocaleString("pt-BR")}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Analisadas por IA</p>
+              </div>
+            )}
+            {tenantsNum > 0 && (
+              <div>
+                <p className="text-2xl font-bold text-amber-400 sm:text-3xl">
+                  {tenantsNum}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">Empresas usando</p>
+              </div>
+            )}
           </div>
         </div>
       </section>

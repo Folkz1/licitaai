@@ -104,6 +104,58 @@ export async function POST(req: NextRequest) {
          AND a.tipo_oportunidade = 'PRE_TRIAGEM_REJEITAR'`,
       [tenant_id]
     );
+
+    // Flywheel: update cross-tenant analysis counters on licitacoes
+    await query(
+      `UPDATE licitacoes l
+       SET analysis_count = sub.cnt,
+           avg_score = sub.avg_s,
+           updated_at = NOW()
+       FROM (
+         SELECT licitacao_id, COUNT(*) as cnt, AVG(score_relevancia) as avg_s
+         FROM analises
+         GROUP BY licitacao_id
+       ) sub
+       WHERE sub.licitacao_id = l.id
+         AND l.tenant_id = $1`,
+      [tenant_id]
+    );
+
+    // Mark the most complete analysis as public preview
+    await query(
+      `UPDATE analises a
+       SET is_public_preview = true
+       WHERE a.id = (
+         SELECT a2.id FROM analises a2
+         JOIN licitacoes l ON l.id = a2.licitacao_id
+         WHERE l.tenant_id = $1
+           AND a2.justificativa IS NOT NULL
+         ORDER BY LENGTH(a2.justificativa) DESC
+         LIMIT 1
+       )`,
+      [tenant_id]
+    );
+  }
+
+  // Auto-generate slugs for new licitações from BUSCA_PNCP
+  if (workflow === "BUSCA_PNCP" && (status === "OK" || status === "SUCCESS") && tenant_id) {
+    await query(
+      `UPDATE licitacoes
+       SET slug = LOWER(
+         REGEXP_REPLACE(
+           CONCAT(
+             COALESCE(uf, 'br'), '-',
+             LEFT(REGEXP_REPLACE(COALESCE(orgao_nome, 'orgao'), '[^a-zA-Z0-9 ]', '', 'g'), 40), '-',
+             id::TEXT, '-',
+             TO_CHAR(COALESCE(data_publicacao, NOW()), 'YYYY-MM')
+           ),
+           '[^a-z0-9]+', '-', 'g'
+         )
+       ),
+       updated_at = NOW()
+       WHERE tenant_id = $1 AND slug IS NULL`,
+      [tenant_id]
+    );
   }
 
   return NextResponse.json({ received: true });

@@ -42,6 +42,11 @@ export async function GET(req: NextRequest) {
   const modalidade = sp.get("modalidade") || "";
   const valorMin = sp.get("valor_min") || "";
   const valorMax = sp.get("valor_max") || "";
+  const dataInicio = sp.get("data_inicio") || "";
+  const dataFim = sp.get("data_fim") || "";
+  const temAnalise = sp.get("tem_analise") || "";
+  const prazoDias = sp.get("prazo_dias") || "";
+  const orderBy = sp.get("order_by") || "";
   const page = Math.max(1, parseInt(sp.get("page") || "1"));
   const limit = Math.min(50, Math.max(1, parseInt(sp.get("limit") || "20")));
   const offset = (page - 1) * limit;
@@ -83,7 +88,38 @@ export async function GET(req: NextRequest) {
     params.push(parseFloat(valorMax));
   }
 
+  if (dataInicio) {
+    paramIdx++;
+    conditions.push(`data_publicacao >= $${paramIdx}`);
+    params.push(dataInicio);
+  }
+
+  if (dataFim) {
+    paramIdx++;
+    conditions.push(`data_publicacao <= $${paramIdx}`);
+    params.push(dataFim);
+  }
+
+  if (temAnalise === "sim") {
+    conditions.push(`COALESCE(analysis_count, 0) > 0`);
+  }
+
+  if (prazoDias) {
+    const dias = parseInt(prazoDias);
+    if (dias > 0) {
+      conditions.push(`data_encerramento_proposta IS NOT NULL AND data_encerramento_proposta >= NOW() AND data_encerramento_proposta <= NOW() + INTERVAL '${dias} days'`);
+    }
+  }
+
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const orderOptions: Record<string, string> = {
+    recentes: "data_publicacao DESC NULLS LAST",
+    valor: "valor_total_estimado DESC NULLS LAST",
+    encerramento: "data_encerramento_proposta ASC NULLS LAST",
+    analisadas: "COALESCE(analysis_count, 0) DESC, data_publicacao DESC NULLS LAST",
+  };
+  const orderClause = orderOptions[orderBy] || orderOptions.recentes;
 
   // Count
   const countResult = await queryOne<{ total: string }>(
@@ -103,19 +139,23 @@ export async function GET(req: NextRequest) {
     modalidade_contratacao: string;
     data_publicacao: string;
     data_encerramento_proposta: string;
+    has_analysis: boolean;
+    score_preview: number | null;
   }>(
     `SELECT slug, orgao_nome, objeto_compra, valor_total_estimado, uf, municipio,
-            modalidade_contratacao, data_publicacao, data_encerramento_proposta
+            modalidade_contratacao, data_publicacao, data_encerramento_proposta,
+            COALESCE(analysis_count, 0) > 0 as has_analysis,
+            avg_score as score_preview
      FROM licitacoes
      ${whereClause}
-     ORDER BY data_publicacao DESC NULLS LAST
+     ORDER BY ${orderClause}
      LIMIT ${limit} OFFSET ${offset}`,
     params
   );
 
   // Log search for analytics (fire and forget)
   const ipHash = createHash("sha256").update(ip).digest("hex").slice(0, 16);
-  const filters = { uf, modalidade, valor_min: valorMin, valor_max: valorMax };
+  const filters = { uf, modalidade, valor_min: valorMin, valor_max: valorMax, data_inicio: dataInicio, data_fim: dataFim, tem_analise: temAnalise, prazo_dias: prazoDias, order_by: orderBy };
   query(
     `INSERT INTO portal_searches (query, filters_json, results_count, ip_hash) VALUES ($1, $2, $3, $4)`,
     [q || null, JSON.stringify(filters), total, ipHash]

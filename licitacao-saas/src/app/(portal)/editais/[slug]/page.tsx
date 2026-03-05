@@ -15,8 +15,11 @@ import {
   Shield,
   Clock,
   Tag,
+  Users,
+  TrendingUp,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import LeadCaptureForm from "@/components/portal/LeadCaptureForm";
 
 export const dynamic = "force-dynamic";
 
@@ -39,10 +42,13 @@ async function getLicitacao(slug: string) {
     municipio: string;
     link_sistema_origem: string;
     link_edital_pncp: string;
+    analysis_count: number;
+    avg_score: number;
   }>(
     `SELECT id, slug, numero_controle_pncp, orgao_nome, objeto_compra, valor_total_estimado,
             modalidade_contratacao, data_publicacao, data_encerramento_proposta,
-            uf, municipio, link_sistema_origem, link_edital_pncp
+            uf, municipio, link_sistema_origem, link_edital_pncp,
+            COALESCE(analysis_count, 0) as analysis_count, avg_score
      FROM licitacoes WHERE slug = $1`,
     [slug]
   );
@@ -196,13 +202,26 @@ export default async function EditalDetalhe({ params }: Props) {
           <div className="lg:col-span-2 space-y-6">
             {/* Header */}
             <div>
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {licitacao.uf && (
                   <Badge variant="outline" className="border-slate-700 text-slate-400">{licitacao.uf}</Badge>
                 )}
                 {licitacao.modalidade_contratacao && (
                   <Badge variant="outline" className="border-slate-700 text-slate-500">
                     {licitacao.modalidade_contratacao}
+                  </Badge>
+                )}
+                {licitacao.analysis_count > 0 && (
+                  <Badge className="bg-indigo-500/15 text-indigo-400 border-indigo-500/20">
+                    <Sparkles className="mr-1 h-3 w-3" />
+                    Analisada por IA
+                    {licitacao.avg_score != null && ` (${Number(licitacao.avg_score).toFixed(1)}/10)`}
+                  </Badge>
+                )}
+                {licitacao.analysis_count > 1 && (
+                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20">
+                    <Users className="mr-1 h-3 w-3" />
+                    {licitacao.analysis_count} empresas interessadas
                   </Badge>
                 )}
               </div>
@@ -349,12 +368,7 @@ export default async function EditalDetalhe({ params }: Props) {
                       <div className="text-center">
                         <Lock className="mx-auto h-6 w-6 text-indigo-400 mb-2" />
                         <p className="text-sm font-medium text-white">Análise completa disponível na plataforma</p>
-                        <Link
-                          href="/login"
-                          className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-medium text-white hover:bg-indigo-500 transition-colors"
-                        >
-                          Cadastre-se grátis <ArrowRight className="h-3.5 w-3.5" />
-                        </Link>
+                        <p className="mt-1 text-xs text-slate-400">Cadastre-se ao lado para ver o preview</p>
                       </div>
                     </div>
                   </div>
@@ -376,21 +390,8 @@ export default async function EditalDetalhe({ params }: Props) {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* CTA Card */}
-            <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-b from-indigo-950/30 to-slate-950/50 p-6 text-center">
-              <Sparkles className="mx-auto h-8 w-8 text-indigo-400 mb-3" />
-              <h3 className="font-semibold text-white">Analise este edital com IA</h3>
-              <p className="mt-2 text-xs text-slate-500">
-                Receba análise completa: prioridade, riscos, documentos necessários e muito mais.
-              </p>
-              <Link
-                href="/login"
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
-              >
-                Acessar Plataforma
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
+            {/* Lead Capture Form */}
+            <LeadCaptureForm sourceSlug={licitacao.slug} />
 
             {/* Related */}
             {relacionadas.length > 0 && (

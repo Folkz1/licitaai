@@ -2,7 +2,7 @@ import { query, queryOne } from "@/lib/db";
 import { formatCurrency } from "@/lib/formatters";
 import { Metadata } from "next";
 import Link from "next/link";
-import { Search, FileText, ArrowLeft, ArrowRight, SlidersHorizontal } from "lucide-react";
+import { Search, FileText, ArrowLeft, ArrowRight, SlidersHorizontal, Sparkles, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,12 @@ interface Props {
     valor_min?: string;
     valor_max?: string;
     page?: string;
+    data_inicio?: string;
+    data_fim?: string;
+    tem_analise?: string;
+    prazo_dias?: string;
+    faixa?: string;
+    order_by?: string;
   }>;
 }
 
@@ -37,6 +43,23 @@ export default async function EditaisListPage({ searchParams }: Props) {
   const sp = await searchParams;
   const page = Math.max(1, parseInt(sp.page || "1"));
   const offset = (page - 1) * LIMIT;
+
+  // Value presets
+  let effectiveValorMin = sp.valor_min;
+  let effectiveValorMax = sp.valor_max;
+  if (sp.faixa) {
+    const faixas: Record<string, [string?, string?]> = {
+      "ate50k": [undefined, "50000"],
+      "50k-500k": ["50000", "500000"],
+      "500k-5m": ["500000", "5000000"],
+      "acima5m": ["5000000", undefined],
+    };
+    const f = faixas[sp.faixa];
+    if (f) {
+      effectiveValorMin = f[0];
+      effectiveValorMax = f[1];
+    }
+  }
 
   // Build WHERE clauses
   const conditions: string[] = ["slug IS NOT NULL"];
@@ -63,19 +86,51 @@ export default async function EditaisListPage({ searchParams }: Props) {
     params.push(`%${sp.modalidade}%`);
   }
 
-  if (sp.valor_min) {
+  if (effectiveValorMin) {
     paramIdx++;
     conditions.push(`valor_total_estimado >= $${paramIdx}`);
-    params.push(parseFloat(sp.valor_min));
+    params.push(parseFloat(effectiveValorMin));
   }
 
-  if (sp.valor_max) {
+  if (effectiveValorMax) {
     paramIdx++;
     conditions.push(`valor_total_estimado <= $${paramIdx}`);
-    params.push(parseFloat(sp.valor_max));
+    params.push(parseFloat(effectiveValorMax));
+  }
+
+  if (sp.data_inicio) {
+    paramIdx++;
+    conditions.push(`data_publicacao >= $${paramIdx}`);
+    params.push(sp.data_inicio);
+  }
+
+  if (sp.data_fim) {
+    paramIdx++;
+    conditions.push(`data_publicacao <= $${paramIdx}`);
+    params.push(sp.data_fim);
+  }
+
+  if (sp.tem_analise === "sim") {
+    conditions.push(`COALESCE(analysis_count, 0) > 0`);
+  }
+
+  if (sp.prazo_dias) {
+    const dias = parseInt(sp.prazo_dias);
+    if (dias > 0) {
+      conditions.push(`data_encerramento_proposta IS NOT NULL AND data_encerramento_proposta >= NOW() AND data_encerramento_proposta <= NOW() + INTERVAL '${dias} days'`);
+    }
   }
 
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  // Order by
+  const orderOptions: Record<string, string> = {
+    recentes: "data_publicacao DESC NULLS LAST",
+    valor: "valor_total_estimado DESC NULLS LAST",
+    encerramento: "data_encerramento_proposta ASC NULLS LAST",
+    analisadas: "COALESCE(analysis_count, 0) DESC, data_publicacao DESC NULLS LAST",
+  };
+  const orderBy = orderOptions[sp.order_by || ""] || orderOptions.recentes;
 
   // Count total
   const countResult = await queryOne<{ total: string }>(
@@ -96,12 +151,15 @@ export default async function EditaisListPage({ searchParams }: Props) {
     modalidade_contratacao: string;
     data_publicacao: string;
     data_encerramento_proposta: string;
+    analysis_count: number;
+    avg_score: number;
   }>(
     `SELECT slug, orgao_nome, objeto_compra, valor_total_estimado, uf, municipio,
-            modalidade_contratacao, data_publicacao, data_encerramento_proposta
+            modalidade_contratacao, data_publicacao, data_encerramento_proposta,
+            COALESCE(analysis_count, 0) as analysis_count, avg_score
      FROM licitacoes
      ${whereClause}
-     ORDER BY data_publicacao DESC NULLS LAST
+     ORDER BY ${orderBy}
      LIMIT ${LIMIT} OFFSET ${offset}`,
     params
   );
@@ -114,7 +172,12 @@ export default async function EditaisListPage({ searchParams }: Props) {
   // Build URL helper
   function buildUrl(overrides: Record<string, string | undefined>) {
     const p = new URLSearchParams();
-    const merged = { q: sp.q, uf: sp.uf, modalidade: sp.modalidade, valor_min: sp.valor_min, valor_max: sp.valor_max, ...overrides };
+    const merged = {
+      q: sp.q, uf: sp.uf, modalidade: sp.modalidade, valor_min: sp.valor_min, valor_max: sp.valor_max,
+      data_inicio: sp.data_inicio, data_fim: sp.data_fim, tem_analise: sp.tem_analise,
+      prazo_dias: sp.prazo_dias, faixa: sp.faixa, order_by: sp.order_by,
+      ...overrides,
+    };
     for (const [k, v] of Object.entries(merged)) {
       if (v) p.set(k, v);
     }
@@ -133,6 +196,7 @@ export default async function EditaisListPage({ searchParams }: Props) {
         </p>
 
         <form action="/editais" method="GET" className="mt-4">
+          {/* Row 1: Search + UF + Submit */}
           <div className="flex gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[240px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -156,27 +220,16 @@ export default async function EditaisListPage({ searchParams }: Props) {
                 </option>
               ))}
             </select>
-            <input
-              type="text"
-              name="modalidade"
-              defaultValue={sp.modalidade}
-              placeholder="Modalidade..."
-              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2.5 text-sm text-slate-300 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none w-40"
-            />
-            <input
-              type="number"
-              name="valor_min"
-              defaultValue={sp.valor_min}
-              placeholder="Valor mín."
-              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2.5 text-sm text-slate-300 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none w-32"
-            />
-            <input
-              type="number"
-              name="valor_max"
-              defaultValue={sp.valor_max}
-              placeholder="Valor máx."
-              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2.5 text-sm text-slate-300 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none w-32"
-            />
+            <select
+              name="order_by"
+              defaultValue={sp.order_by || ""}
+              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2.5 text-sm text-slate-300 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">Mais recentes</option>
+              <option value="valor">Maior valor</option>
+              <option value="encerramento">Encerrando em breve</option>
+              <option value="analisadas">Mais analisadas</option>
+            </select>
             <button
               type="submit"
               className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 transition-colors flex items-center gap-1.5"
@@ -185,9 +238,92 @@ export default async function EditaisListPage({ searchParams }: Props) {
               Filtrar
             </button>
           </div>
+
+          {/* Row 2: Advanced filters */}
+          <div className="mt-3 flex gap-3 flex-wrap items-center">
+            <input
+              type="text"
+              name="modalidade"
+              defaultValue={sp.modalidade}
+              placeholder="Modalidade..."
+              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-xs text-slate-300 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none w-36"
+            />
+            <input
+              type="date"
+              name="data_inicio"
+              defaultValue={sp.data_inicio}
+              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none"
+            />
+            <span className="text-xs text-slate-600">a</span>
+            <input
+              type="date"
+              name="data_fim"
+              defaultValue={sp.data_fim}
+              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none"
+            />
+            <select
+              name="tem_analise"
+              defaultValue={sp.tem_analise || ""}
+              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">Todas</option>
+              <option value="sim">Com análise IA</option>
+            </select>
+            <select
+              name="prazo_dias"
+              defaultValue={sp.prazo_dias || ""}
+              className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-2 text-xs text-slate-300 focus:border-indigo-500 focus:outline-none"
+            >
+              <option value="">Qualquer prazo</option>
+              <option value="7">Encerra em 7 dias</option>
+              <option value="30">Encerra em 30 dias</option>
+            </select>
+          </div>
+
+          {/* Row 3: Value range presets */}
+          <div className="mt-3 flex gap-2 flex-wrap items-center">
+            <span className="text-xs text-slate-500">Faixa de valor:</span>
+            {[
+              { key: "ate50k", label: "Até R$50k" },
+              { key: "50k-500k", label: "R$50k-500k" },
+              { key: "500k-5m", label: "R$500k-5M" },
+              { key: "acima5m", label: "Acima R$5M" },
+            ].map((f) => (
+              <Link
+                key={f.key}
+                href={buildUrl({ faixa: sp.faixa === f.key ? undefined : f.key, valor_min: undefined, valor_max: undefined, page: undefined })}
+                className={`rounded-full px-3 py-1 text-xs border transition-colors ${
+                  sp.faixa === f.key
+                    ? "border-indigo-500 text-indigo-400 bg-indigo-500/10"
+                    : "border-slate-700/60 text-slate-400 hover:border-indigo-500/50 hover:text-white"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+            {!sp.faixa && (
+              <>
+                <input
+                  type="number"
+                  name="valor_min"
+                  defaultValue={sp.valor_min}
+                  placeholder="Valor mín."
+                  className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none w-28"
+                />
+                <input
+                  type="number"
+                  name="valor_max"
+                  defaultValue={sp.valor_max}
+                  placeholder="Valor máx."
+                  className="rounded-lg border border-slate-700/60 bg-slate-900/80 px-3 py-1.5 text-xs text-slate-300 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none w-28"
+                />
+              </>
+            )}
+          </div>
+
           {/* Active filters */}
-          {(sp.q || sp.uf || sp.modalidade || sp.valor_min || sp.valor_max) && (
-            <div className="mt-3 flex items-center gap-2">
+          {(sp.q || sp.uf || sp.modalidade || sp.valor_min || sp.valor_max || sp.faixa || sp.tem_analise || sp.prazo_dias || sp.data_inicio) && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
               <span className="text-xs text-slate-500">Filtros:</span>
               {sp.q && (
                 <Link href={buildUrl({ q: undefined, page: undefined })}>
@@ -207,6 +343,34 @@ export default async function EditaisListPage({ searchParams }: Props) {
                 <Link href={buildUrl({ modalidade: undefined, page: undefined })}>
                   <Badge variant="outline" className="text-xs border-indigo-500/30 text-indigo-400 hover:border-red-500/50 cursor-pointer">
                     {sp.modalidade} ×
+                  </Badge>
+                </Link>
+              )}
+              {sp.faixa && (
+                <Link href={buildUrl({ faixa: undefined, page: undefined })}>
+                  <Badge variant="outline" className="text-xs border-indigo-500/30 text-indigo-400 hover:border-red-500/50 cursor-pointer">
+                    Faixa: {sp.faixa} ×
+                  </Badge>
+                </Link>
+              )}
+              {sp.tem_analise && (
+                <Link href={buildUrl({ tem_analise: undefined, page: undefined })}>
+                  <Badge variant="outline" className="text-xs border-indigo-500/30 text-indigo-400 hover:border-red-500/50 cursor-pointer">
+                    Com análise IA ×
+                  </Badge>
+                </Link>
+              )}
+              {sp.prazo_dias && (
+                <Link href={buildUrl({ prazo_dias: undefined, page: undefined })}>
+                  <Badge variant="outline" className="text-xs border-indigo-500/30 text-indigo-400 hover:border-red-500/50 cursor-pointer">
+                    Encerra em {sp.prazo_dias}d ×
+                  </Badge>
+                </Link>
+              )}
+              {sp.data_inicio && (
+                <Link href={buildUrl({ data_inicio: undefined, data_fim: undefined, page: undefined })}>
+                  <Badge variant="outline" className="text-xs border-indigo-500/30 text-indigo-400 hover:border-red-500/50 cursor-pointer">
+                    Período: {sp.data_inicio}{sp.data_fim ? ` a ${sp.data_fim}` : ""} ×
                   </Badge>
                 </Link>
               )}
@@ -237,7 +401,7 @@ export default async function EditaisListPage({ searchParams }: Props) {
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     {lic.uf && (
                       <Badge variant="outline" className="text-xs border-slate-700 text-slate-400 shrink-0">
                         {lic.uf}
@@ -246,6 +410,18 @@ export default async function EditaisListPage({ searchParams }: Props) {
                     {lic.modalidade_contratacao && (
                       <Badge variant="outline" className="text-xs border-slate-700 text-slate-500 truncate max-w-[200px]">
                         {lic.modalidade_contratacao}
+                      </Badge>
+                    )}
+                    {lic.analysis_count > 0 && (
+                      <Badge className="text-xs bg-indigo-500/15 text-indigo-400 border-indigo-500/20">
+                        <Sparkles className="mr-1 h-3 w-3" />
+                        IA {lic.avg_score != null ? `${Number(lic.avg_score).toFixed(0)}/10` : ""}
+                      </Badge>
+                    )}
+                    {lic.analysis_count > 1 && (
+                      <Badge className="text-xs bg-amber-500/10 text-amber-400 border-amber-500/20">
+                        <Users className="mr-1 h-3 w-3" />
+                        {lic.analysis_count}
                       </Badge>
                     )}
                   </div>
