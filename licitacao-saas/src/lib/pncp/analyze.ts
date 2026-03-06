@@ -1217,7 +1217,17 @@ export async function executarAnalise(
       } catch (err) {
         stats.erros_analise++;
         const msg = err instanceof Error ? err.message : "Unknown error";
+        const stack = err instanceof Error ? err.stack?.slice(0, 300) : "";
         await onProgress?.(`[${i + 1}/${aprovadas.length}] ERRO: ${msg.slice(0, 100)}`);
+        // Log error details to workflow execution
+        if (executionId) {
+          await query(
+            `UPDATE workflow_executions SET
+              logs = COALESCE(logs, '[]'::jsonb) || $2::jsonb
+            WHERE id = $1`,
+            [executionId, JSON.stringify([{ time: new Date().toISOString(), message: `ERRO analise ${lic.id}: ${msg}\n${stack}`, level: "error" }])]
+          ).catch(() => {});
+        }
       }
     }
 
