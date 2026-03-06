@@ -107,7 +107,7 @@ async function callLLM(
       max_tokens: maxTokens,
       response_format: { type: "json_object" },
     }),
-    signal: AbortSignal.timeout(120000),
+    signal: AbortSignal.timeout(300000), // 5 min for large docs
   });
 
   if (!res.ok) {
@@ -156,12 +156,41 @@ async function getEmbeddings(texts: string[]): Promise<number[][]> {
 }
 
 function chunkText(text: string, size = RAG_CHUNK_SIZE, overlap = RAG_CHUNK_OVERLAP): string[] {
+  if (!text || text.length === 0) return [];
+  if (text.length <= size) return [text];
+
+  // Paragraph-aware chunking (matches N8N behavior)
   const chunks: string[] = [];
-  let pos = 0;
-  while (pos < text.length) {
-    chunks.push(text.slice(pos, pos + size));
-    pos += size - overlap;
+  const paras = text.split(/\n\n+/).map(s => s.trim()).filter(Boolean);
+
+  function splitWithOverlap(t: string): string[] {
+    const out: string[] = [];
+    let start = 0;
+    while (start < t.length) {
+      const end = Math.min(start + size, t.length);
+      out.push(t.slice(start, end).trim());
+      if (end >= t.length) break;
+      start += Math.max(1, size - overlap);
+    }
+    return out.filter(Boolean);
   }
+
+  if (paras.length > 1) {
+    let buf = "";
+    for (const p of paras) {
+      const next = (buf ? buf + "\n\n" : "") + p;
+      if (next.length > size) {
+        if (buf) chunks.push(...splitWithOverlap(buf));
+        buf = p;
+      } else {
+        buf = next;
+      }
+    }
+    if (buf) chunks.push(...splitWithOverlap(buf));
+  } else {
+    chunks.push(...splitWithOverlap(text));
+  }
+
   return chunks;
 }
 
@@ -422,7 +451,15 @@ async function callOcrSupremo(documents: { url: string; id: string; nome: string
 
     const data = await res.json();
     const text = extractTextFromOcr(data);
-    return truncateText(text.replace(/\\n/g, "\n").replace(/\\t/g, "\t").trim());
+    // Return FULL text — RAG handles context window, no truncation here
+    return text
+      .replace(/\u0000/g, "")
+      .replace(/\\n/g, "\n")
+      .replace(/\\t/g, "\t")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
   } catch {
     return "";
   }
@@ -431,14 +468,15 @@ async function callOcrSupremo(documents: { url: string; id: string; nome: string
 async function buildRagContext(
   tenantId: string,
   licitacaoId: string,
-  editalText: string
+  editalText: string,
+  keywords: string[] = []
 ): Promise<string> {
-  // 1. Create chunks
+  // 1. Create chunks (paragraph-aware)
   const chunks = chunkText(editalText);
-  if (chunks.length === 0) return "";
+  if (chunks.length === 0) return buildFallbackContext(editalText);
 
   // 2. Generate a project_id for this licitacao's RAG
-  const projectId = licitacaoId; // reuse licitacao id as project_id
+  const projectId = licitacaoId;
 
   // 3. Delete old vectors for this licitacao
   await query(
@@ -446,21 +484,55 @@ async function buildRagContext(
     [tenantId, projectId]
   );
 
-  // 4. Embed all chunks
-  const chunkEmbeddings = await getEmbeddings(chunks);
+  // 4. Embed chunks in batches of 50 (API limits)
+  const BATCH_SIZE = 50;
+  const allEmbeddings: number[][] = [];
+  for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+    const batch = chunks.slice(i, i + BATCH_SIZE);
+    const embeddings = await getEmbeddings(batch);
+    allEmbeddings.push(...embeddings);
+  }
 
-  // 5. Insert chunks with vectors
+  // 5. Batch insert all chunks (single SQL with VALUES)
+  const insertValues: string[] = [];
+  const insertParams: unknown[] = [tenantId, projectId];
+  let paramIdx = 3;
+
   for (let i = 0; i < chunks.length; i++) {
+    const metaJson = JSON.stringify({
+      chunk_index: i,
+      total_chunks: chunks.length,
+      source: "edital",
+      licitacao_id: licitacaoId,
+    });
+    const vecStr = `[${allEmbeddings[i].join(",")}]`;
+    insertValues.push(`($1::uuid, $2::uuid, $${paramIdx}, $${paramIdx + 1}::jsonb, $${paramIdx + 2}::vector)`);
+    insertParams.push(chunks[i], metaJson, vecStr);
+    paramIdx += 3;
+  }
+
+  // Insert in batches of 20 rows (avoid too many params)
+  const ROW_BATCH = 20;
+  for (let i = 0; i < insertValues.length; i += ROW_BATCH) {
+    const batchValues = insertValues.slice(i, i + ROW_BATCH);
+    // Rebuild params for this batch
+    const batchParams: unknown[] = [tenantId, projectId];
+    let bIdx = 3;
+    for (let j = i; j < Math.min(i + ROW_BATCH, chunks.length); j++) {
+      const metaJson = JSON.stringify({
+        chunk_index: j,
+        total_chunks: chunks.length,
+        source: "edital",
+        licitacao_id: licitacaoId,
+      });
+      const vecStr = `[${allEmbeddings[j].join(",")}]`;
+      batchValues[j - i] = `($1::uuid, $2::uuid, $${bIdx}, $${bIdx + 1}::jsonb, $${bIdx + 2}::vector)`;
+      batchParams.push(chunks[j], metaJson, vecStr);
+      bIdx += 3;
+    }
     await query(
-      `INSERT INTO project_knowledge_base (tenant_id, project_id, content, metadata, embedding)
-       VALUES ($1::uuid, $2::uuid, $3, $4::jsonb, $5::vector)`,
-      [
-        tenantId,
-        projectId,
-        chunks[i],
-        JSON.stringify({ chunk_index: i, source: "edital", licitacao_id: licitacaoId }),
-        `[${chunkEmbeddings[i].join(",")}]`,
-      ]
+      `INSERT INTO project_knowledge_base (tenant_id, project_id, content, metadata, embedding) VALUES ${batchValues.join(", ")}`,
+      batchParams
     );
   }
 
@@ -469,59 +541,119 @@ async function buildRagContext(
   const approxTokens = Math.ceil(totalChars / 4);
   await trackLlmUsage(tenantId, "EMBEDDINGS", EMBEDDING_MODEL, approxTokens, 0, licitacaoId);
 
-  // 6. Semantic queries for different aspects
+  // 6. HYBRID RETRIEVAL: semantic search + keyword matching
+  // Semantic search alone misses item lists (numbers + product names have poor embedding similarity)
+  const keywordStr = keywords.slice(0, 10).join(", ");
   const semanticQueries = [
-    "datas importantes sessao abertura encerramento proposta prazo",
-    "itens tabela quantidade unidade valor unitario total",
-    "prazo entrega pagamento vigencia contrato validade proposta",
-    "amostra exigida prototipo demonstracao",
-    "micro empresa pequena empresa ME EPP cota reservada LC 123",
+    { name: "datas", text: "data e hora da sessão/disputa/abertura; recebimento de propostas; data limite; pregão eletrônico" },
+    { name: "itens", text: `tabela de itens/lotes: item, descrição, quantidade, unidade, valor unitário, valor total; ${keywordStr || "papel, resma, A4, bobina"}; cota reservada` },
+    { name: "prazos", text: "prazos: entrega, pagamento, vigência do contrato/ata, validade da proposta, impugnação, esclarecimentos" },
+    { name: "amostra", text: "exigência de amostra: apresentação/entrega de amostra, protótipo, amostra física; prazo e local" },
+    { name: "me_epp", text: "ME/EPP por item: exclusivo ME/EPP, cota reservada, cota principal, LC 123, microempresa" },
   ];
 
   // 7. Embed queries
-  const queryEmbeddings = await getEmbeddings(semanticQueries);
-  await trackLlmUsage(tenantId, "EMBEDDINGS", EMBEDDING_MODEL, Math.ceil(semanticQueries.join(" ").length / 4), 0, licitacaoId);
+  const queryTexts = semanticQueries.map(q => q.text);
+  const queryEmbeddings = await getEmbeddings(queryTexts);
+  await trackLlmUsage(tenantId, "EMBEDDINGS", EMBEDDING_MODEL, Math.ceil(queryTexts.join(" ").length / 4), 0, licitacaoId);
 
-  // 8. For each query, find closest chunks
-  const allResults: { query_label: string; content: string; distance: number }[] = [];
+  // 8. Global ranking SQL (DISTINCT per chunk, global TOP K)
+  const qValues = semanticQueries.map((q, i) => {
+    const vec = `[${queryEmbeddings[i].join(",")}]`;
+    return `('${q.name}', '${vec}'::vector)`;
+  }).join(", ");
 
-  for (let q = 0; q < semanticQueries.length; q++) {
-    const vecStr = `[${queryEmbeddings[q].join(",")}]`;
-    const results = await query<{ content: string; distance: number }>(
-      `SELECT content, embedding <=> $1::vector AS distance
-       FROM project_knowledge_base
-       WHERE tenant_id = $2::uuid AND project_id = $3::uuid
-       ORDER BY embedding <=> $1::vector
-       LIMIT 3`,
-      [vecStr, tenantId, projectId]
-    );
+  const ragResults = await query<{ query_name: string; content: string; similarity: number }>(
+    `WITH q(name, embedding) AS (VALUES ${qValues}),
+     scored AS (
+       SELECT kb.id, kb.content, q.name as query_name,
+              (kb.embedding <=> q.embedding) as distance,
+              row_number() OVER (PARTITION BY kb.id ORDER BY (kb.embedding <=> q.embedding)) as rn_best
+       FROM q
+       JOIN project_knowledge_base kb
+         ON kb.tenant_id = $1::uuid AND kb.project_id = $2::uuid
+        AND kb.embedding IS NOT NULL
+     ),
+     best AS (
+       SELECT id, content, query_name, distance
+       FROM scored WHERE rn_best = 1
+     ),
+     ranked AS (
+       SELECT query_name, content, (1 - distance) as similarity,
+              row_number() OVER (ORDER BY distance) as rn
+       FROM best
+     )
+     SELECT query_name, content, similarity
+     FROM ranked WHERE rn <= $3
+     ORDER BY rn`,
+    [tenantId, projectId, RAG_TOP_K]
+  );
 
-    const labels = ["DATAS", "ITENS", "PRAZOS", "AMOSTRA", "ME/EPP"];
-    for (const r of results) {
-      allResults.push({ query_label: labels[q], content: r.content, distance: r.distance });
+  // 9. KEYWORD MATCHING: find chunks containing tenant product keywords
+  // This catches item lists that embeddings miss (product names + numbers ≠ natural language)
+  const semanticContentSet = new Set(ragResults.map(r => r.content.slice(0, 100)));
+  const keywordChunks: { query_name: string; content: string; similarity: number }[] = [];
+
+  if (keywords.length > 0) {
+    const lowerKeywords = keywords.map(k => k.toLowerCase());
+    for (const chunk of chunks) {
+      // Skip chunks already in semantic results
+      if (semanticContentSet.has(chunk.slice(0, 100))) continue;
+
+      const lowerChunk = chunk.toLowerCase();
+      // Count keyword matches + check for price/quantity patterns (item table markers)
+      const kwMatches = lowerKeywords.filter(kw => lowerChunk.includes(kw)).length;
+      const hasNumbers = /\d+[.,]\d{2}/.test(chunk); // price pattern (e.g., 78.900,00)
+      const hasItemPattern = /\b(unidade|pacote|caixa|resma|fls|folha|SIM|NÃO|rolo|bobina|metro)\b/i.test(chunk);
+
+      // Match if: 2+ keywords, OR 1 keyword + looks like an item table
+      if (kwMatches >= 2 || (kwMatches >= 1 && hasNumbers && hasItemPattern)) {
+        keywordChunks.push({
+          query_name: "itens_keyword",
+          content: chunk,
+          similarity: kwMatches * 0.1, // synthetic score for sorting
+        });
+      }
+    }
+    // Sort by keyword match count (descending), take up to 10 chunks
+    // Item lists often span many pages — need enough chunks to capture all items
+    keywordChunks.sort((a, b) => b.similarity - a.similarity);
+    keywordChunks.splice(10);
+  }
+
+  // 10. Merge semantic + keyword results
+  const allResults = [...ragResults, ...keywordChunks];
+
+  if (allResults.length === 0) {
+    return buildFallbackContext(editalText);
+  }
+
+  // Group by category for readable output
+  const order = ["datas", "itens", "itens_keyword", "prazos", "amostra", "me_epp"];
+  const grouped = new Map<string, typeof allResults>();
+  for (const r of allResults) {
+    const list = grouped.get(r.query_name) || [];
+    list.push(r);
+    grouped.set(r.query_name, list);
+  }
+
+  let context = `LICITACAO_ID: ${licitacaoId}\nREGRAS: use SOMENTE os trechos abaixo para preencher o JSON. Se não achar, use null/0/[].\n---\n`;
+  for (const name of order) {
+    const list = grouped.get(name);
+    if (!list || list.length === 0) continue;
+    const label = name === "itens_keyword" ? "ITENS (PRODUTOS)" : name.toUpperCase();
+    context += `\n## ${label}\n`;
+    for (const r of list) {
+      context += `${r.content.trim()}\n---\n`;
     }
   }
-
-  // 9. Dedupe and take top K
-  const seen = new Set<string>();
-  const unique = allResults
-    .sort((a, b) => a.distance - b.distance)
-    .filter((r) => {
-      const key = r.content.slice(0, 100);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .slice(0, RAG_TOP_K);
-
-  // 10. Format context
-  if (unique.length === 0) return "";
-
-  let context = `REGRAS: Use SOMENTE os trechos abaixo para extrair informacoes. Se um dado nao estiver nos trechos, retorne null/0/[].\n---\n`;
-  for (const r of unique) {
-    context += `\n## ${r.query_label}\n${r.content.slice(0, 2000)}\n---\n`;
-  }
   return context;
+}
+
+function buildFallbackContext(editalText: string): string {
+  // Fallback: send first 30K of raw OCR (matches N8N behavior)
+  if (!editalText || editalText.length < 100) return "";
+  return `[RAG] Nenhum trecho recuperado. Texto bruto do edital:\n\n${editalText.slice(0, 30000)}`;
 }
 
 async function runFullAnalysis(
@@ -626,11 +758,15 @@ ${ragContext || "Nenhum documento disponivel. Analise baseada apenas no objeto d
 
 ${ctx.prompt_analise_completa || ""}
 
-## REGRAS ANTI-ALUCINACAO
+## REGRAS OBRIGATORIAS
 1. Extraia APENAS informacoes presentes no TEXTO DO EDITAL acima
 2. Se um dado nao estiver explicito, retorne null/0/[]
 3. NAO invente informacoes
 4. Para cada item, cite a evidencia do texto
+5. EXTRAIA TODOS os itens que sejam produtos/servicos do segmento da empresa, independente do valor unitario
+6. Inclua itens de qualquer valor, desde que sejam relevantes para a empresa (papel, envelope, pasta, impressos, etc.)
+7. Para prioridade, use APENAS: "P1" (alta), "P2" (media), "P3" (baixa), ou "REJEITAR"
+8. Para cada item use EXATAMENTE estes campos: numero (inteiro), descricao, quantidade, unidade, valor_unitario, valor_total, e_produto_grafico (true/false), tipo_produto, confianca (0-100), evidencia
 
 ## FORMATO DE SAIDA JSON
 Responda EXATAMENTE neste formato JSON. Inclua todos os campos, mesmo com null/0/[].
@@ -639,7 +775,7 @@ ${ctx.output_schema || defaultSchema}`;
   const result = await callLLM(ANALYSIS_MODEL, [
     { role: "system", content: "Voce e um Analista de Licitacoes Senior especializado em EXTRACAO de dados de editais. Responda apenas com JSON valido." },
     { role: "user", content: prompt },
-  ], 0.15, 8192);
+  ], 0.15, 16384);
 
   await trackLlmUsage(ctx.tenant_id, "ANALISE_COMPLETA", ANALYSIS_MODEL, result.usage.input_tokens, result.usage.output_tokens, lic.id);
 
@@ -685,7 +821,16 @@ function normalizeAnalysis(raw: Record<string, unknown>): {
   const resumo = (raw.resumo || {}) as Record<string, unknown>;
   const itensRaw = (raw.itens || []) as Record<string, unknown>[];
 
-  const prioridade = (analise.prioridade as string) || "P3";
+  // Normalize prioridade — LLM sometimes returns a sentence instead of P1/P2/P3
+  let prioridade = String(analise.prioridade || "P3").trim();
+  if (!["P1", "P2", "P3", "REJEITAR"].includes(prioridade)) {
+    const lower = prioridade.toLowerCase();
+    if (lower.includes("alta") || lower.includes("p1")) prioridade = "P1";
+    else if (lower.includes("media") || lower.includes("média") || lower.includes("p2")) prioridade = "P2";
+    else if (lower.includes("baixa") || lower.includes("p3")) prioridade = "P3";
+    else if (lower.includes("rejeit")) prioridade = "REJEITAR";
+    else prioridade = "P3";
+  }
   const justificativa = (analise.justificativa as string) || (analise.recomendacao as string) || "";
 
   // Score: map priority to score
@@ -700,20 +845,48 @@ function normalizeAnalysis(raw: Record<string, unknown>): {
   // Valor itens relevantes
   const valorRelevantes = parseNumber(resumo.valor_itens_relevantes);
 
-  // Items normalization
-  const itens = itensRaw.map((item, idx) => ({
-    numero_item: parseNumber(item.numero) || idx + 1,
-    descricao: String(item.descricao || ""),
-    quantidade: parseNumber(item.quantidade),
-    unidade: String(item.unidade || "UN"),
-    valor_unitario: parseNumber(item.valor_unitario),
-    valor_total: parseNumber(item.valor_total),
-    e_produto_grafico: parseBool(item.e_produto_relevante) ?? parseBool(item.e_produto_grafico) ?? false,
-    tipo_produto: item.tipo_produto ? String(item.tipo_produto) : null,
-    confianca_classificacao: Math.min(100, Math.max(0, parseNumber(item.confianca))),
-    item_exclusivo_me_epp: parseBool(item.item_exclusivo_me_epp) ?? false,
-    evidencia: item.evidencia ? String(item.evidencia) : null,
-  }));
+  // Items normalization (matches N8N "Processar Resposta IA")
+  const itens = itensRaw.map((item, idx) => {
+    const quantidade = parseNumber(item.quantidade);
+    const valor_unitario = parseNumber(item.valor_unitario);
+    let valor_total = parseNumber(item.valor_total);
+    // Recalculate valor_total if missing (like N8N does)
+    if ((!valor_total || valor_total === 0) && quantidade && valor_unitario) {
+      valor_total = quantidade * valor_unitario;
+    }
+    // Handle multiple field name variations for the boolean classification
+    const e_produto_grafico =
+      parseBool(item.e_produto_grafico) ??
+      parseBool(item.e_produto_relevante) ??
+      parseBool(item.existe) ??
+      parseBool(item.relevante) ??
+      false;
+    // confianca as 0.00-1.00 (N8N divides by 100)
+    const rawConf = parseNumber(item.confianca) || parseNumber(item.confianca_classificacao);
+    const confianca = rawConf > 1 ? Math.round((rawConf / 100) * 100) / 100 : Math.round(rawConf * 100) / 100;
+
+    // Handle item number from multiple fields
+    const itemNum = parseNumber(item.numero) || parseNumber(item.id) || parseNumber(item.item) || parseNumber(item.numero_item);
+
+    return {
+      numero_item: itemNum || idx + 1,
+      descricao: String(item.descricao || ""),
+      quantidade,
+      unidade: String(item.unidade || "UN"),
+      valor_unitario,
+      valor_total: valor_total || 0,
+      e_produto_grafico,
+      tipo_produto: item.tipo_produto ? String(item.tipo_produto) : "outro",
+      confianca_classificacao: confianca,
+      item_exclusivo_me_epp: parseBool(item.item_exclusivo_me_epp) ?? false,
+      evidencia: item.evidencia ? String(item.evidencia).slice(0, 400) : null,
+    };
+  });
+
+  // Recalculate valor_itens_relevantes from items (N8N does this, not from LLM summary)
+  const valorRelevantesCalc = itens
+    .filter(i => i.e_produto_grafico)
+    .reduce((acc, i) => acc + (i.valor_total || 0), 0);
 
   // Extract custom fields (anything not in standard schema)
   const standardKeys = new Set(["analise", "resumo", "itens", "documentos_necessarios", "prazos_importantes", "requisitos_tecnicos", "analise_riscos", "preferencias_me_epp", "garantias", "forma_fornecimento"]);
@@ -729,7 +902,7 @@ function normalizeAnalysis(raw: Record<string, unknown>): {
     justificativa,
     score_relevancia: score,
     tipo_oportunidade: tipo,
-    valor_itens_relevantes: valorRelevantes,
+    valor_itens_relevantes: valorRelevantesCalc || parseNumber(resumo.valor_itens_relevantes),
     amostra_exigida: parseBool(analise.amostra_exigida),
     amostra_evidencia: analise.amostra_evidencia ? String(analise.amostra_evidencia) : null,
     documentos_necessarios: safeJson(raw.documentos_necessarios),
@@ -950,9 +1123,29 @@ export async function executarAnalise(
           const editalText = await callOcrSupremo(ocrDocs);
 
           if (editalText.length > 100) {
-            // 4c. RAG
-            await onProgress?.(`[${i + 1}/${aprovadas.length}] Criando RAG chunks + embeddings...`);
-            ragContext = await buildRagContext(tenantId, lic.id, editalText);
+            // Store OCR text in editais table (like N8N "Gravar Edital")
+            await query(
+              `INSERT INTO editais (licitacao_id, arquivo_url, arquivo_nome, conteudo_texto, ocr_sucesso, ocr_metodo, tamanho_bytes)
+               VALUES ($1, $2, $3, $4, true, 'OCR_SUPREMO', $5)
+               ON CONFLICT (licitacao_id) DO UPDATE SET
+                 conteudo_texto = EXCLUDED.conteudo_texto, ocr_sucesso = true,
+                 tamanho_bytes = EXCLUDED.tamanho_bytes, updated_at = NOW()`,
+              [lic.id, ocrDocs[0]?.url || "", ocrDocs[0]?.nome || "edital.pdf", editalText, editalText.length]
+            );
+
+            // 4c. Build context for LLM
+            // GPT-4.1-mini has 1M token context → 500K chars (~125K tokens) fits easily
+            // Only use RAG for very large documents where full text exceeds model capacity
+            const RAG_THRESHOLD = 500000; // 500K chars (~125K tokens)
+            if (editalText.length <= RAG_THRESHOLD) {
+              // Send full OCR text — no need for RAG with large context models
+              await onProgress?.(`[${i + 1}/${aprovadas.length}] Texto completo: ${Math.ceil(editalText.length / 1000)}K chars direto para LLM`);
+              ragContext = `TEXTO COMPLETO DO EDITAL:\n\n${editalText}`;
+            } else {
+              // Very large document — use RAG hybrid (semantic + keyword)
+              await onProgress?.(`[${i + 1}/${aprovadas.length}] RAG: ${Math.ceil(editalText.length / 1000)}K chars → chunks + embeddings...`);
+              ragContext = await buildRagContext(tenantId, lic.id, editalText, ctx.palavras_inclusao);
+            }
           } else {
             stats.erros_ocr++;
             await onProgress?.(`[${i + 1}/${aprovadas.length}] OCR insuficiente (${editalText.length} chars), analisando sem edital`);
