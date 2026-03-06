@@ -957,7 +957,7 @@ async function saveAnalysis(
       documentos_necessarios, prazos, requisitos_tecnicos, analise_riscos,
       preferencias_me_epp, garantias, forma_fornecimento, campos_customizados,
       raw_response, modelo_ia, tokens_entrada, tokens_saida, tempo_analise_ms
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
     ON CONFLICT (licitacao_id) DO UPDATE SET
       execution_id = EXCLUDED.execution_id,
       prioridade = EXCLUDED.prioridade,
