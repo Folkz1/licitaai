@@ -1,5 +1,5 @@
 import { query, queryOne } from "@/lib/db";
-import { triggerAnalise } from "@/lib/n8n/client";
+import { executarAnalise } from "@/lib/pncp/analyze";
 import { executarBusca } from "@/lib/pncp/search";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -79,19 +79,13 @@ export async function GET(req: NextRequest) {
         // Create execution record
         const execution = await queryOne<{ id: string }>(
           `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
-           VALUES ($1, 'analise', 'PENDING', NULL, 'Iniciando análise com IA (cron)...', $2)
+           VALUES ($1, 'analise', 'RUNNING', NULL, 'Iniciando analise com IA (cron/code)...', $2)
            RETURNING id`,
-          [schedule.tenant_id, JSON.stringify([{ time: new Date().toISOString(), message: "Análise disparada pelo cron", level: "info" }])]
+          [schedule.tenant_id, JSON.stringify([{ time: new Date().toISOString(), message: "Analise disparada pelo cron (code)", level: "info" }])]
         );
 
-        // Trigger n8n webhook with execution_id
-        await triggerAnalise(schedule.tenant_id, execution?.id);
-
-        // Update to RUNNING
-        await query(
-          `UPDATE workflow_executions SET status = 'RUNNING', current_step = 'Carregando editais pendentes...' WHERE id = $1`,
-          [execution?.id]
-        );
+        // Execute analysis directly (no N8N dependency)
+        await executarAnalise(schedule.tenant_id, execution?.id);
       }
 
       // Update schedule: set last_run, increment count, calculate next_run
