@@ -18,8 +18,8 @@ const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
 const OCR_WEBHOOK = "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/ocr-supremo";
 
-const PRE_TRIAGEM_MODEL = "openai/gpt-4.1-mini";
-const ANALYSIS_MODEL = "qwen/qwen3-235b-a22b";
+const PRE_TRIAGEM_MODEL = process.env.PRETRIAGEM_MODEL || "openai/gpt-4.1-mini";
+const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "openai/gpt-4.1-mini";
 const EMBEDDING_MODEL = "text-embedding-3-small";
 
 const RAG_CHUNK_SIZE = 4000;
@@ -126,14 +126,21 @@ async function callLLM(
 }
 
 async function getEmbeddings(texts: string[]): Promise<number[][]> {
-  const res = await fetch("https://api.openai.com/v1/embeddings", {
+  // Use OpenAI directly if key available, otherwise fall back to OpenRouter
+  const useOpenAI = !!OPENAI_KEY;
+  const url = useOpenAI
+    ? "https://api.openai.com/v1/embeddings"
+    : "https://openrouter.ai/api/v1/embeddings";
+  const key = useOpenAI ? OPENAI_KEY : OPENROUTER_KEY;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENAI_KEY}`,
+      Authorization: `Bearer ${key}`,
     },
     body: JSON.stringify({
-      model: EMBEDDING_MODEL,
+      model: useOpenAI ? EMBEDDING_MODEL : `openai/${EMBEDDING_MODEL}`,
       input: texts,
     }),
     signal: AbortSignal.timeout(60000),
@@ -141,7 +148,7 @@ async function getEmbeddings(texts: string[]): Promise<number[][]> {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`OpenAI Embeddings ${res.status}: ${text}`);
+    throw new Error(`Embeddings ${res.status}: ${text}`);
   }
 
   const data = await res.json();
