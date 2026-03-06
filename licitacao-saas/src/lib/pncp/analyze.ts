@@ -1006,25 +1006,15 @@ async function saveAnalysis(
     ]
   );
 
-  // Upsert items
+  // Delete old items and insert fresh (no unique constraint on licitacao_id+numero_item)
+  await query(`DELETE FROM itens_licitacao WHERE licitacao_id = $1`, [licitacaoId]);
   for (const item of normalized.itens) {
     await query(
       `INSERT INTO itens_licitacao (
         licitacao_id, numero_item, descricao, quantidade, unidade,
         valor_unitario, valor_total, e_produto_grafico, tipo_produto,
         confianca_classificacao, item_exclusivo_me_epp, evidencia
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      ON CONFLICT (licitacao_id, numero_item) DO UPDATE SET
-        descricao = EXCLUDED.descricao,
-        quantidade = EXCLUDED.quantidade,
-        unidade = EXCLUDED.unidade,
-        valor_unitario = EXCLUDED.valor_unitario,
-        valor_total = EXCLUDED.valor_total,
-        e_produto_grafico = EXCLUDED.e_produto_grafico,
-        tipo_produto = EXCLUDED.tipo_produto,
-        confianca_classificacao = EXCLUDED.confianca_classificacao,
-        item_exclusivo_me_epp = EXCLUDED.item_exclusivo_me_epp,
-        evidencia = EXCLUDED.evidencia`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         licitacaoId,
         item.numero_item,
