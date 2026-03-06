@@ -656,11 +656,20 @@ function buildFallbackContext(editalText: string): string {
   return `[RAG] Nenhum trecho recuperado. Texto bruto do edital:\n\n${editalText.slice(0, 30000)}`;
 }
 
+interface FullAnalysisResult {
+  data: Record<string, unknown>;
+  raw: string;
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  time_ms: number;
+}
+
 async function runFullAnalysis(
   lic: PendingLicitacao,
   ctx: TenantContext,
   ragContext: string
-): Promise<Record<string, unknown>> {
+): Promise<FullAnalysisResult> {
   const focoUf = (ctx.config as Record<string, unknown>)?.foco_uf || lic.uf || "";
   const regra80k = (ctx.config as Record<string, unknown>)?.regra_80k;
 
@@ -772,18 +781,35 @@ ${ctx.prompt_analise_completa || ""}
 Responda EXATAMENTE neste formato JSON. Inclua todos os campos, mesmo com null/0/[].
 ${ctx.output_schema || defaultSchema}`;
 
+  const startMs = Date.now();
   const result = await callLLM(ANALYSIS_MODEL, [
     { role: "system", content: "Voce e um Analista de Licitacoes Senior especializado em EXTRACAO de dados de editais. Responda apenas com JSON valido." },
     { role: "user", content: prompt },
   ], 0.15, 16384);
+  const elapsedMs = Date.now() - startMs;
 
   await trackLlmUsage(ctx.tenant_id, "ANALISE_COMPLETA", ANALYSIS_MODEL, result.usage.input_tokens, result.usage.output_tokens, lic.id);
 
+  const rawContent = result.content;
   try {
-    const cleaned = result.content.replace(/```json?\s*\n?/g, "").replace(/```\s*$/g, "").trim();
-    return JSON.parse(cleaned);
+    const cleaned = rawContent.replace(/```json?\s*\n?/g, "").replace(/```\s*$/g, "").trim();
+    return {
+      data: JSON.parse(cleaned),
+      raw: cleaned,
+      model: ANALYSIS_MODEL,
+      tokens_in: result.usage.input_tokens,
+      tokens_out: result.usage.output_tokens,
+      time_ms: elapsedMs,
+    };
   } catch {
-    return { analise: { prioridade: "P3", justificativa: "Erro ao parsear resposta da IA" }, itens: [] };
+    return {
+      data: { analise: { prioridade: "P3", justificativa: "Erro ao parsear resposta da IA" }, itens: [] },
+      raw: rawContent,
+      model: ANALYSIS_MODEL,
+      tokens_in: result.usage.input_tokens,
+      tokens_out: result.usage.output_tokens,
+      time_ms: elapsedMs,
+    };
   }
 }
 
@@ -920,7 +946,8 @@ function normalizeAnalysis(raw: Record<string, unknown>): {
 async function saveAnalysis(
   licitacaoId: string,
   executionId: string | undefined,
-  normalized: ReturnType<typeof normalizeAnalysis>
+  normalized: ReturnType<typeof normalizeAnalysis>,
+  meta?: { raw: string; model: string; tokens_in: number; tokens_out: number; time_ms: number }
 ) {
   // Upsert analise
   await query(
@@ -928,8 +955,9 @@ async function saveAnalysis(
       licitacao_id, execution_id, prioridade, tipo_oportunidade, score_relevancia,
       justificativa, valor_itens_relevantes, amostra_exigida, amostra_evidencia,
       documentos_necessarios, prazos, requisitos_tecnicos, analise_riscos,
-      preferencias_me_epp, garantias, forma_fornecimento, campos_customizados
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+      preferencias_me_epp, garantias, forma_fornecimento, campos_customizados,
+      raw_response, modelo_ia, tokens_entrada, tokens_saida, tempo_analise_ms
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
     ON CONFLICT (licitacao_id) DO UPDATE SET
       execution_id = EXCLUDED.execution_id,
       prioridade = EXCLUDED.prioridade,
@@ -946,7 +974,12 @@ async function saveAnalysis(
       preferencias_me_epp = EXCLUDED.preferencias_me_epp,
       garantias = EXCLUDED.garantias,
       forma_fornecimento = EXCLUDED.forma_fornecimento,
-      campos_customizados = EXCLUDED.campos_customizados`,
+      campos_customizados = EXCLUDED.campos_customizados,
+      raw_response = EXCLUDED.raw_response,
+      modelo_ia = EXCLUDED.modelo_ia,
+      tokens_entrada = EXCLUDED.tokens_entrada,
+      tokens_saida = EXCLUDED.tokens_saida,
+      tempo_analise_ms = EXCLUDED.tempo_analise_ms`,
     [
       licitacaoId,
       executionId || null,
@@ -965,6 +998,11 @@ async function saveAnalysis(
       normalized.garantias,
       normalized.forma_fornecimento,
       normalized.campos_customizados,
+      meta?.raw || null,
+      meta?.model || null,
+      meta?.tokens_in || null,
+      meta?.tokens_out || null,
+      meta?.time_ms || null,
     ]
   );
 
@@ -1006,7 +1044,7 @@ async function saveAnalysis(
 
   // Update licitacao status
   await query(
-    `UPDATE licitacoes SET status = 'ANALISADA', updated_at = NOW() WHERE id = $1`,
+    `UPDATE licitacoes SET status = 'ANALISADA', review_phase = 'analyzed', updated_at = NOW() WHERE id = $1`,
     [licitacaoId]
   );
 }
@@ -1157,16 +1195,22 @@ export async function executarAnalise(
 
         // 4d. Full AI analysis
         await onProgress?.(`[${i + 1}/${aprovadas.length}] IA Analise Completa...`);
-        const rawAnalysis = await runFullAnalysis(lic, ctx, ragContext);
+        const analysisResult = await runFullAnalysis(lic, ctx, ragContext);
 
         // 4e. Normalize
-        const normalized = normalizeAnalysis(rawAnalysis);
+        const normalized = normalizeAnalysis(analysisResult.data);
 
         // 4f. Save
-        await saveAnalysis(lic.id, executionId, normalized);
+        await saveAnalysis(lic.id, executionId, normalized, {
+          raw: analysisResult.raw,
+          model: analysisResult.model,
+          tokens_in: analysisResult.tokens_in,
+          tokens_out: analysisResult.tokens_out,
+          time_ms: analysisResult.time_ms,
+        });
         stats.analisadas++;
 
-        await onProgress?.(`[${i + 1}/${aprovadas.length}] ${normalized.prioridade} - ${normalized.justificativa.slice(0, 80)}`);
+        await onProgress?.(`[${i + 1}/${aprovadas.length}] ${normalized.prioridade} | ${normalized.itens.length} itens | ${analysisResult.tokens_in}+${analysisResult.tokens_out} tokens | ${(analysisResult.time_ms / 1000).toFixed(1)}s`);
 
         // Rate limit between analyses
         await new Promise((r) => setTimeout(r, 500));
