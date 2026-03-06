@@ -3,7 +3,7 @@ import { query, queryOne } from "@/lib/db";
 import { executarAnalise } from "@/lib/pncp/analyze";
 import { NextResponse } from "next/server";
 
-export const maxDuration = 300; // 5 min
+export const maxDuration = 300; // 5 min for Vercel
 
 export async function POST() {
   const session = await auth();
@@ -12,7 +12,7 @@ export async function POST() {
   try {
     const tenantId = session.user.tenantId;
 
-    // Check if there's already a running analysis for this tenant
+    // Check if there's already a running analysis
     const running = await queryOne(
       `SELECT id FROM workflow_executions
        WHERE tenant_id = $1 AND workflow_type = 'analise' AND status IN ('PENDING', 'RUNNING')`,
@@ -42,7 +42,7 @@ export async function POST() {
       }
     );
 
-    // Trigger callback for review_phase updates + flywheel
+    // Trigger callback for status updates (review_phase, flywheel counters)
     if (result.success) {
       await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/n8n/callback`, {
         method: "POST",

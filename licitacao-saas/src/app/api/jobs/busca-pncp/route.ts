@@ -1,9 +1,9 @@
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
-import { executarAnalise } from "@/lib/pncp/analyze";
+import { executarBusca } from "@/lib/pncp/search";
 import { NextResponse } from "next/server";
 
-export const maxDuration = 300; // 5 min
+export const maxDuration = 300; // 5 min for Vercel
 
 export async function POST() {
   const session = await auth();
@@ -12,26 +12,26 @@ export async function POST() {
   try {
     const tenantId = session.user.tenantId;
 
-    // Check if there's already a running analysis for this tenant
+    // Check if there's already a running busca
     const running = await queryOne(
       `SELECT id FROM workflow_executions
-       WHERE tenant_id = $1 AND workflow_type = 'analise' AND status IN ('PENDING', 'RUNNING')`,
+       WHERE tenant_id = $1 AND workflow_type = 'busca' AND status IN ('PENDING', 'RUNNING')`,
       [tenantId]
     );
     if (running) {
-      return NextResponse.json({ error: "Ja existe uma analise em andamento" }, { status: 409 });
+      return NextResponse.json({ error: "Ja existe uma busca em andamento" }, { status: 409 });
     }
 
     // Create execution record
     const execution = await queryOne<{ id: string }>(
       `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
-       VALUES ($1, 'analise', 'RUNNING', $2, 'Iniciando analise com IA (code)...', $3)
+       VALUES ($1, 'busca', 'RUNNING', $2, 'Iniciando busca PNCP (code)...', $3)
        RETURNING id`,
-      [tenantId, session.user.id, JSON.stringify([{ time: new Date().toISOString(), message: "Analise disparada pelo dashboard (code)", level: "info" }])]
+      [tenantId, session.user.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo dashboard (code)", level: "info" }])]
     );
 
-    // Execute analysis directly (no N8N)
-    const result = await executarAnalise(
+    // Execute search directly (no N8N)
+    const result = await executarBusca(
       tenantId,
       execution?.id,
       async (msg) => {
@@ -42,13 +42,13 @@ export async function POST() {
       }
     );
 
-    // Trigger callback for review_phase updates + flywheel
+    // Send callback to update statuses (reuse existing callback logic)
     if (result.success) {
       await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/n8n/callback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workflow: "ANALISE_EDITAIS",
+          workflow: "BUSCA_PNCP",
           tenant_id: tenantId,
           status: "SUCCESS",
           execution_id: execution?.id,

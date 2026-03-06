@@ -1,7 +1,9 @@
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
-import { triggerBusca, type BuscaConfig } from "@/lib/n8n/client";
+import { executarBusca } from "@/lib/pncp/search";
 import { NextResponse } from "next/server";
+
+export const maxDuration = 300; // 5 min
 
 export async function POST() {
   const session = await auth();
@@ -10,55 +12,52 @@ export async function POST() {
   try {
     const tenantId = session.user.tenantId;
 
-    // Check if there's already a running busca for this tenant
+    // Check if there's already a running busca
     const running = await queryOne(
       `SELECT id FROM workflow_executions
        WHERE tenant_id = $1 AND workflow_type = 'busca' AND status IN ('PENDING', 'RUNNING')`,
       [tenantId]
     );
     if (running) {
-      return NextResponse.json({ error: "Já existe uma busca em andamento" }, { status: 409 });
+      return NextResponse.json({ error: "Ja existe uma busca em andamento" }, { status: 409 });
     }
-
-    // Load tenant search configuration (UFs, modalidades, etc.)
-    const config = await queryOne<{
-      ufs: string[] | null;
-      modalidades_contratacao: string[] | null;
-      dias_retroativos: number | null;
-      valor_minimo: number | null;
-      valor_maximo: number | null;
-    }>(
-      `SELECT ufs, modalidades_contratacao, dias_retroativos, valor_minimo, valor_maximo
-       FROM configuracoes_busca WHERE tenant_id = $1`,
-      [tenantId]
-    );
-
-    const buscaConfig: BuscaConfig = {
-      ufs: config?.ufs || undefined,
-      modalidades_contratacao: config?.modalidades_contratacao || undefined,
-      dias_retroativos: config?.dias_retroativos || undefined,
-      valor_minimo: config?.valor_minimo || undefined,
-      valor_maximo: config?.valor_maximo || undefined,
-    };
 
     // Create execution record
     const execution = await queryOne<{ id: string }>(
       `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
-       VALUES ($1, 'busca', 'PENDING', $2, 'Iniciando busca no PNCP...', $3)
+       VALUES ($1, 'busca', 'RUNNING', $2, 'Iniciando busca PNCP (code)...', $3)
        RETURNING id`,
-      [tenantId, session.user.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo dashboard", level: "info", config: buscaConfig }])]
+      [tenantId, session.user.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo dashboard (code)", level: "info" }])]
     );
 
-    // Trigger n8n webhook with execution_id + search config
-    const result = await triggerBusca(tenantId, execution?.id, buscaConfig);
-
-    // Update to RUNNING
-    await query(
-      `UPDATE workflow_executions SET status = 'RUNNING', current_step = 'Conectando ao PNCP...' WHERE id = $1`,
-      [execution?.id]
+    // Execute search directly (no N8N)
+    const result = await executarBusca(
+      tenantId,
+      execution?.id,
+      async (msg) => {
+        await query(
+          `UPDATE workflow_executions SET current_step = $2 WHERE id = $1`,
+          [execution?.id, msg]
+        );
+      }
     );
 
-    return NextResponse.json({ success: true, execution_id: execution?.id, result });
+    // Trigger callback for slug generation etc.
+    if (result.success) {
+      await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}/api/n8n/callback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workflow: "BUSCA_PNCP",
+          tenant_id: tenantId,
+          status: "SUCCESS",
+          execution_id: execution?.id,
+          metrics: result.stats,
+        }),
+      });
+    }
+
+    return NextResponse.json({ success: result.success, execution_id: execution?.id, stats: result.stats, error: result.error });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
