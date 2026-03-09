@@ -61,6 +61,13 @@ export async function GET(req: NextRequest) {
     params.push(deadlineUntil);
   }
 
+  const sortBy = searchParams.get("sort_by") || "deadline";
+  const orderBy = sortBy === "publicacao"
+    ? "ORDER BY l.data_publicacao DESC NULLS LAST"
+    : sortBy === "valor"
+    ? "ORDER BY l.valor_total_estimado DESC NULLS LAST"
+    : "ORDER BY expirada ASC, l.data_encerramento_proposta ASC NULLS LAST";
+
   const [rows, countResult] = await Promise.all([
     query(
       `SELECT l.id, l.numero_controle_pncp, l.orgao_nome, l.objeto_compra,
@@ -74,7 +81,7 @@ export async function GET(req: NextRequest) {
        FROM licitacoes l
        LEFT JOIN analises a ON a.licitacao_id = l.id
        ${whereClause}
-       ORDER BY expirada ASC, l.data_encerramento_proposta ASC NULLS LAST
+       ${orderBy}
        LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`,
       [...params, limit, offset]
     ),

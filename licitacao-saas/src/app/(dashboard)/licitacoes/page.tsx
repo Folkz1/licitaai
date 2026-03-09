@@ -154,9 +154,11 @@ function formatCurrency(value: number) {
 
 function formatDate(date: string) {
   if (!date) return "-";
-  return new Date(date).toLocaleDateString("pt-BR", {
+  const d = new Date(date);
+  return d.toLocaleDateString("pt-BR", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
+    year: "numeric",
   });
 }
 
@@ -227,6 +229,7 @@ export default function LicitacoesPage() {
     search: searchParams.get("search") || "",
     priority: searchParams.get("priority") || "",
     deadlineUntil: searchParams.get("deadline_until") || "",
+    sortBy: searchParams.get("sort_by") || "deadline",
   });
   const [pageSize, setPageSize] = useState(
     parseInt(searchParams.get("limit") || String(DEFAULT_PAGE_SIZE))
@@ -245,6 +248,7 @@ export default function LicitacoesPage() {
     if (currentFilters.search) params.set("search", currentFilters.search);
     if (currentFilters.priority) params.set("priority", currentFilters.priority);
     if (currentFilters.deadlineUntil) params.set("deadline_until", currentFilters.deadlineUntil);
+    if (currentFilters.sortBy && currentFilters.sortBy !== "deadline") params.set("sort_by", currentFilters.sortBy);
     const qs = params.toString();
     const newUrl = qs ? `${pathname}?${qs}` : pathname;
     window.history.replaceState(null, "", newUrl);
@@ -260,6 +264,7 @@ export default function LicitacoesPage() {
       if (filters.search) params.set("search", filters.search);
       if (filters.priority) params.set("priority", filters.priority);
       if (filters.deadlineUntil) params.set("deadline_until", filters.deadlineUntil);
+      if (filters.sortBy) params.set("sort_by", filters.sortBy);
 
       syncUrl(page, filters, pageSize);
 
@@ -293,6 +298,7 @@ export default function LicitacoesPage() {
     filters.uf,
     filters.priority,
     filters.deadlineUntil,
+    filters.sortBy !== "deadline" && filters.sortBy,
   ].filter(Boolean).length;
 
   return (
@@ -419,6 +425,16 @@ export default function LicitacoesPage() {
               <span className="text-[11px] text-slate-400">ate {new Date(filters.deadlineUntil + "T00:00:00").toLocaleDateString("pt-BR")}</span>
             )}
           </div>
+          <Select value={filters.sortBy} onValueChange={(v) => { setFilters(f => ({...f, sortBy: v})); }}>
+            <SelectTrigger className="w-[180px] bg-slate-900 border-slate-700">
+              <SelectValue placeholder="Ordenar por..." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="deadline">Prazo (urgente primeiro)</SelectItem>
+              <SelectItem value="publicacao">Data publicacao (recente)</SelectItem>
+              <SelectItem value="valor">Valor (maior primeiro)</SelectItem>
+            </SelectContent>
+          </Select>
           {activeFilterCount > 0 && (
             <Button
               variant="ghost"
@@ -431,6 +447,7 @@ export default function LicitacoesPage() {
                   search: filters.search,
                   priority: "",
                   deadlineUntil: "",
+                  sortBy: "deadline",
                 })
               }
               className="text-slate-400 hover:text-white text-xs"
