@@ -42,26 +42,36 @@ export async function POST(req: NextRequest) {
     linkOrigem = (formData.get("link_sistema_origem") as string) || "";
 
     const textField = formData.get("edital_text");
-    const file = formData.get("file");
+    // Support multiple files: "files" (multiple) or legacy "file" (single)
+    const allFiles = formData.getAll("files").concat(formData.getAll("file"));
+    const validFiles = allFiles.filter(
+      (f): f is File => f instanceof Blob && f.size > 0
+    );
 
     if (textField && typeof textField === "string" && textField.length > 50) {
       editalText = textField;
-    } else if (file && file instanceof Blob && file.size > 0) {
-      // Send PDF to OCR Supremo
+    } else if (validFiles.length > 0) {
+      // Send all files to OCR Supremo
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString("base64");
-        const fileName = (file as File).name || "edital.pdf";
-        const mimeType = file.type || "application/pdf";
-        const dataUrl = `data:${mimeType};base64,${base64}`;
-        const ocrId = randomUUID().slice(0, 8);
+        const documents = await Promise.all(
+          validFiles.map(async (file, idx) => {
+            const arrayBuffer = await file.arrayBuffer();
+            const base64 = Buffer.from(arrayBuffer).toString("base64");
+            const fileName = (file as File).name || `doc_${idx + 1}.pdf`;
+            const mimeType = file.type || "application/pdf";
+            return {
+              url: `data:${mimeType};base64,${base64}`,
+              id: `${randomUUID().slice(0, 8)}_${idx}`,
+              nome: fileName,
+              tipo: idx === 0 ? "Edital" : "Anexo",
+            };
+          })
+        );
 
         const ocrRes = await fetch(OCR_WEBHOOK, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            documents: [{ url: dataUrl, id: ocrId, nome: fileName, tipo: "Edital" }],
-          }),
+          body: JSON.stringify({ documents }),
           signal: AbortSignal.timeout(240000), // 4 min
         });
 

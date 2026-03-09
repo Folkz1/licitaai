@@ -29,7 +29,7 @@ export function NovaLicitacaoModal({ onClose, onSuccess }: NovaLicitacaoModalPro
   const [step, setStep] = useState<Step>("form");
   const [inputMode, setInputMode] = useState<"file" | "text">("file");
   const [editalText, setEditalText] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [linkOrigem, setLinkOrigem] = useState("");
   const [showExtras, setShowExtras] = useState(false);
   const [orgaoNome, setOrgaoNome] = useState("");
@@ -44,21 +44,36 @@ export function NovaLicitacaoModal({ onClose, onSuccess }: NovaLicitacaoModalPro
   } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const hasEdital = (inputMode === "file" && file) || (inputMode === "text" && editalText.trim().length > 50);
+  const hasEdital = (inputMode === "file" && files.length > 0) || (inputMode === "text" && editalText.trim().length > 50);
+
+  function addFiles(newFiles: FileList | null) {
+    if (!newFiles) return;
+    setFiles((prev) => [...prev, ...Array.from(newFiles)]);
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function formatSize(bytes: number) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
 
   async function handleAnalyze() {
     if (!hasEdital) return;
 
     setSaving(true);
     setStep("analyzing");
-    setProgressMsg(inputMode === "file" ? "Enviando PDF para OCR..." : "Preparando análise...");
+    setProgressMsg(inputMode === "file" ? `Enviando ${files.length} arquivo(s) para OCR...` : "Preparando análise...");
 
     try {
       // Single POST that creates + analyzes
       const fd = new FormData();
 
-      if (inputMode === "file" && file) {
-        fd.append("file", file);
+      if (inputMode === "file" && files.length > 0) {
+        files.forEach((f) => fd.append("files", f));
       } else if (inputMode === "text") {
         fd.append("edital_text", editalText);
       }
@@ -217,38 +232,50 @@ export function NovaLicitacaoModal({ onClose, onSuccess }: NovaLicitacaoModalPro
                 </button>
               </div>
 
-              {/* File upload */}
+              {/* File upload — multiple files */}
               {inputMode === "file" && (
-                <div>
+                <div className="space-y-2">
                   <input
                     ref={fileRef}
                     type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                    multiple
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.odt,.rar,.zip,.7z,.txt,.rtf,.csv"
+                    onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
                     className="hidden"
                   />
                   <div
                     onClick={() => fileRef.current?.click()}
-                    className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors ${
-                      file
-                        ? "border-indigo-500/50 bg-indigo-500/10"
-                        : "border-slate-700 bg-slate-800/30 hover:border-indigo-500/50 hover:bg-indigo-500/5"
-                    }`}
+                    onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                    onDrop={(e) => { e.preventDefault(); e.stopPropagation(); addFiles(e.dataTransfer.files); }}
+                    className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-700 bg-slate-800/30 p-6 cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-colors"
                   >
-                    {file ? (
-                      <>
-                        <FileText className="h-10 w-10 text-indigo-400" />
-                        <p className="text-sm text-white font-medium">{file.name}</p>
-                        <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(0)} KB — clique para trocar</p>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-10 w-10 text-slate-500" />
-                        <p className="text-sm text-slate-300">Arraste o PDF aqui ou clique para selecionar</p>
-                        <p className="text-xs text-slate-500">PDF, DOC ou DOCX — será processado por OCR</p>
-                      </>
-                    )}
+                    <Upload className="h-8 w-8 text-slate-500" />
+                    <p className="text-sm text-slate-300">Arraste arquivos aqui ou clique para selecionar</p>
+                    <p className="text-xs text-slate-500">PDF, DOC, XLS, RAR, ZIP, TXT — múltiplos arquivos aceitos</p>
                   </div>
+
+                  {/* File list */}
+                  {files.length > 0 && (
+                    <div className="space-y-1.5">
+                      {files.map((f, i) => (
+                        <div key={`${f.name}-${i}`} className="flex items-center gap-2 rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2">
+                          <FileText className="h-4 w-4 text-indigo-400 shrink-0" />
+                          <span className="text-sm text-white truncate flex-1">{f.name}</span>
+                          <span className="text-xs text-slate-500 shrink-0">{formatSize(f.size)}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); removeFile(i); }}
+                            className="text-slate-500 hover:text-red-400 transition-colors shrink-0"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                      <p className="text-xs text-slate-500">
+                        {files.length} arquivo(s) — {formatSize(files.reduce((s, f) => s + f.size, 0))} total
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
