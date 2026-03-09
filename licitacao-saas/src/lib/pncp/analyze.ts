@@ -696,6 +696,13 @@ async function runFullAnalysis(
   const focoUf = (ctx.config as Record<string, unknown>)?.foco_uf || lic.uf || "";
   const regra80k = (ctx.config as Record<string, unknown>)?.regra_80k;
 
+  // Build segment-aware item description for the schema
+  const segmento = (ctx.segmento || "").toLowerCase();
+  const isServicos = segmento.includes("medic") || segmento.includes("saude") || segmento.includes("servi") || segmento.includes("segur") || segmento.includes("portaria");
+  const itemDesc = isServicos
+    ? '"tipo_produto": "especialidade/servico (ex: Cardiologia, Ortopedia, Vigilancia, etc.)"'
+    : '"tipo_produto": "categoria do produto (ex: envelope, papel, impressos, etc.)"';
+
   const defaultSchema = `{
   "resumo": {
     "objeto_resumido": "string",
@@ -725,7 +732,7 @@ async function runFullAnalysis(
       "valor_unitario": 0,
       "valor_total": 0,
       "e_produto_relevante": true/false,
-      "tipo_produto": "string ou null",
+      ${itemDesc},
       "confianca": 0-100,
       "evidencia": "trecho do edital"
     }
@@ -796,9 +803,11 @@ ${ctx.prompt_analise_completa || ""}
 3. NAO invente informacoes
 4. Para cada item, cite a evidencia do texto
 5. EXTRAIA TODOS os itens que sejam produtos/servicos do segmento da empresa, independente do valor unitario
-6. Inclua itens de qualquer valor, desde que sejam relevantes para a empresa (papel, envelope, pasta, impressos, etc.)
+6. Inclua itens de qualquer valor, desde que sejam relevantes para o segmento "${ctx.segmento || "geral"}" da empresa
+7. Para servicos de saude: liste CADA especialidade medica como um item separado (ex: "Consulta Cardiologia", "Cirurgia Ortopedica")
+8. Para seguranca/portaria: liste cada posto/turno como item separado
 7. Para prioridade, use APENAS: "P1" (alta), "P2" (media), "P3" (baixa), ou "REJEITAR"
-8. Para cada item use EXATAMENTE estes campos: numero (inteiro), descricao, quantidade, unidade, valor_unitario, valor_total, e_produto_grafico (true/false), tipo_produto, confianca (0-100), evidencia
+10. Para cada item use EXATAMENTE estes campos: numero (inteiro), descricao, quantidade, unidade, valor_unitario, valor_total, e_produto_relevante (true/false = relevante para o segmento da empresa), tipo_produto (categoria/especialidade), confianca (0-100), evidencia
 
 ## FORMATO DE SAIDA JSON
 Responda EXATAMENTE neste formato JSON. Inclua todos os campos, mesmo com null/0/[].

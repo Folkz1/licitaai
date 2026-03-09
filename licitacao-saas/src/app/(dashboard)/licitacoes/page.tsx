@@ -230,6 +230,8 @@ export default function LicitacoesPage() {
     priority: searchParams.get("priority") || "",
     deadlineUntil: searchParams.get("deadline_until") || "",
     sortBy: searchParams.get("sort_by") || "deadline",
+    period: searchParams.get("period") || "",
+    analyzed: searchParams.get("analyzed") || "",
   });
   const [pageSize, setPageSize] = useState(
     parseInt(searchParams.get("limit") || String(DEFAULT_PAGE_SIZE))
@@ -249,6 +251,8 @@ export default function LicitacoesPage() {
     if (currentFilters.priority) params.set("priority", currentFilters.priority);
     if (currentFilters.deadlineUntil) params.set("deadline_until", currentFilters.deadlineUntil);
     if (currentFilters.sortBy && currentFilters.sortBy !== "deadline") params.set("sort_by", currentFilters.sortBy);
+    if (currentFilters.period) params.set("period", currentFilters.period);
+    if (currentFilters.analyzed) params.set("analyzed", currentFilters.analyzed);
     const qs = params.toString();
     const newUrl = qs ? `${pathname}?${qs}` : pathname;
     window.history.replaceState(null, "", newUrl);
@@ -265,6 +269,8 @@ export default function LicitacoesPage() {
       if (filters.priority) params.set("priority", filters.priority);
       if (filters.deadlineUntil) params.set("deadline_until", filters.deadlineUntil);
       if (filters.sortBy) params.set("sort_by", filters.sortBy);
+      if (filters.period) params.set("period", filters.period);
+      if (filters.analyzed) params.set("analyzed", filters.analyzed);
 
       syncUrl(page, filters, pageSize);
 
@@ -299,6 +305,8 @@ export default function LicitacoesPage() {
     filters.priority,
     filters.deadlineUntil,
     filters.sortBy !== "deadline" && filters.sortBy,
+    filters.period,
+    filters.analyzed,
   ].filter(Boolean).length;
 
   return (
@@ -351,6 +359,47 @@ export default function LicitacoesPage() {
           onChange={(e) => handleSearchChange(e.target.value)}
           className="pl-10 border-slate-700/50 bg-slate-900/80 text-white h-11 text-sm placeholder:text-slate-600 focus:border-indigo-500/50 focus:ring-indigo-500/20"
         />
+      </div>
+
+      {/* Quick Period Filters */}
+      <div className="flex gap-2">
+        {[
+          { key: "", label: "Todas" },
+          { key: "today", label: "Hoje" },
+          { key: "week", label: "Semana" },
+          { key: "month", label: "Mes" },
+        ].map(({ key, label }) => (
+          <Button
+            key={key}
+            variant={filters.period === key ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilters(f => ({ ...f, period: key }))}
+            className={filters.period === key
+              ? "bg-indigo-600 hover:bg-indigo-500 text-white"
+              : "border-slate-700 text-slate-400 hover:text-white"}
+          >
+            {label}
+          </Button>
+        ))}
+        <div className="ml-2 border-l border-slate-700 pl-2 flex gap-2">
+          {[
+            { key: "", label: "Todas" },
+            { key: "true", label: "Analisadas" },
+            { key: "false", label: "Pendentes" },
+          ].map(({ key, label }) => (
+            <Button
+              key={key}
+              variant={filters.analyzed === key ? "default" : "outline"}
+              size="sm"
+              onClick={() => setFilters(f => ({ ...f, analyzed: key }))}
+              className={filters.analyzed === key
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                : "border-slate-700 text-slate-400 hover:text-white"}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {/* Filters Panel */}
@@ -448,6 +497,8 @@ export default function LicitacoesPage() {
                   priority: "",
                   deadlineUntil: "",
                   sortBy: "deadline",
+                  period: "",
+                  analyzed: "",
                 })
               }
               className="text-slate-400 hover:text-white text-xs"

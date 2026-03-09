@@ -118,32 +118,54 @@ function parseJson(str: string) {
 }
 
 function renderValue(value: unknown): React.ReactNode {
-  if (value === null || value === undefined) return "-";
+  if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "boolean") return value ? "Sim" : "Não";
-  if (typeof value === "number" || typeof value === "string") return String(value);
+  if (typeof value === "number") return String(value);
+  if (typeof value === "string") return value;
   if (Array.isArray(value)) {
     if (value.length === 0) return "-";
     if (typeof value[0] === "object") {
       return (
-        <div className="space-y-1">
+        <div className="space-y-2">
           {value.map((item, i) => (
-            <div key={i} className="text-xs text-slate-300">{typeof item === "object" ? JSON.stringify(item, null, 0) : String(item)}</div>
+            <div key={i} className="rounded bg-slate-800/30 px-2 py-1">
+              {typeof item === "object" && item !== null
+                ? Object.entries(item as Record<string, unknown>).map(([k, v]) => (
+                    <div key={k} className="text-xs">
+                      <span className="text-slate-500">{k.replace(/_/g, " ")}:</span>{" "}
+                      <span className="text-slate-200">{renderValue(v)}</span>
+                    </div>
+                  ))
+                : <span className="text-xs text-slate-300">{String(item)}</span>}
+            </div>
           ))}
         </div>
       );
     }
-    return value.join(", ");
+    return value.map(String).join(", ");
   }
   if (typeof value === "object") {
     return (
       <div className="space-y-1">
-        {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
-          <div key={k} className="text-xs"><span className="text-slate-500">{k}:</span> {String(v ?? "-")}</div>
-        ))}
+        {Object.entries(value as Record<string, unknown>)
+          .filter(([, v]) => v !== null && v !== undefined && v !== "")
+          .map(([k, v]) => (
+            <div key={k} className="text-xs">
+              <span className="text-slate-500">{k.replace(/_/g, " ")}:</span>{" "}
+              <span className="text-slate-200">{renderValue(v)}</span>
+            </div>
+          ))}
       </div>
     );
   }
   return String(value);
+}
+
+function isEmptyValue(value: unknown): boolean {
+  if (value === null || value === undefined || value === "") return true;
+  if (typeof value === "string" && value.trim() === "") return true;
+  if (Array.isArray(value) && value.length === 0) return true;
+  return false;
 }
 
 function parsePncpNcp(ncp: string) {
@@ -523,12 +545,16 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                       }
                       if (Array.isArray(parsed)) {
                         return (
-                          <ul className="list-inside list-disc space-y-1 text-sm text-slate-300">
-                            {parsed.map((item: string, i: number) => <li key={i}>{String(item)}</li>)}
-                          </ul>
+                          <div className="space-y-2 text-sm text-slate-300">
+                            {parsed.map((item: unknown, i: number) => (
+                              <div key={i} className="rounded-lg bg-slate-800/50 px-3 py-2">
+                                {renderValue(item)}
+                              </div>
+                            ))}
+                          </div>
                         );
                       }
-                      return <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{String(parsed)}</p>;
+                      return <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{renderValue(parsed)}</p>;
                     })()}
                   </CardContent>
                 </Card>
@@ -614,7 +640,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                           </div>
                         );
                       }
-                      return <p className="text-sm text-slate-300 leading-relaxed">{String(parsed)}</p>;
+                      return <p className="text-sm text-slate-300 leading-relaxed">{renderValue(parsed)}</p>;
                     })()}
                   </CardContent>
                 </Card>
@@ -642,13 +668,13 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                           </div>
                         );
                       }
-                      return <p className="text-sm text-slate-300 leading-relaxed">{String(parsed)}</p>;
+                      return <p className="text-sm text-slate-300 leading-relaxed">{renderValue(parsed)}</p>;
                     })()}
                   </CardContent>
                 </Card>
               )}
 
-              {analise.campos_customizados && Object.keys(analise.campos_customizados).length > 0 && (
+              {analise.campos_customizados && Object.entries(analise.campos_customizados).filter(([, v]) => !isEmptyValue(v)).length > 0 && (
                 <Card className="border-slate-800 bg-slate-900/50 md:col-span-2">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
@@ -657,7 +683,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-2 md:grid-cols-2">
-                      {Object.entries(analise.campos_customizados).map(([key, value]) => (
+                      {Object.entries(analise.campos_customizados).filter(([, v]) => !isEmptyValue(v)).map(([key, value]) => (
                         <div key={key} className="flex justify-between items-start rounded-lg bg-slate-800/50 px-3 py-2">
                           <span className="text-sm font-medium text-slate-400">
                             {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}

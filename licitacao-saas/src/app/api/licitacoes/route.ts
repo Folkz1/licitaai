@@ -61,6 +61,22 @@ export async function GET(req: NextRequest) {
     params.push(deadlineUntil);
   }
 
+  const period = searchParams.get("period");
+  if (period === "today") {
+    whereClause += ` AND l.created_at >= CURRENT_DATE`;
+  } else if (period === "week") {
+    whereClause += ` AND l.created_at >= CURRENT_DATE - INTERVAL '7 days'`;
+  } else if (period === "month") {
+    whereClause += ` AND l.created_at >= DATE_TRUNC('month', CURRENT_DATE)`;
+  }
+
+  const analyzed = searchParams.get("analyzed");
+  if (analyzed === "true") {
+    whereClause += ` AND a.id IS NOT NULL`;
+  } else if (analyzed === "false") {
+    whereClause += ` AND a.id IS NULL`;
+  }
+
   const sortBy = searchParams.get("sort_by") || "deadline";
   const orderBy = sortBy === "publicacao"
     ? "ORDER BY l.data_publicacao DESC NULLS LAST"
