@@ -20,7 +20,6 @@ import {
   Filter,
   MapPin,
   Building2,
-  Calendar,
   DollarSign,
   AlertTriangle,
   Clock,
@@ -228,7 +227,6 @@ export default function LicitacoesPage() {
     uf: searchParams.get("uf") || "",
     search: searchParams.get("search") || "",
     priority: searchParams.get("priority") || "",
-    deadlineUntil: searchParams.get("deadline_until") || "",
     sortBy: searchParams.get("sort_by") || "deadline",
     period: searchParams.get("period") || "",
     analyzed: searchParams.get("analyzed") || "",
@@ -249,7 +247,6 @@ export default function LicitacoesPage() {
     if (currentFilters.uf) params.set("uf", currentFilters.uf);
     if (currentFilters.search) params.set("search", currentFilters.search);
     if (currentFilters.priority) params.set("priority", currentFilters.priority);
-    if (currentFilters.deadlineUntil) params.set("deadline_until", currentFilters.deadlineUntil);
     if (currentFilters.sortBy && currentFilters.sortBy !== "deadline") params.set("sort_by", currentFilters.sortBy);
     if (currentFilters.period) params.set("period", currentFilters.period);
     if (currentFilters.analyzed) params.set("analyzed", currentFilters.analyzed);
@@ -267,7 +264,6 @@ export default function LicitacoesPage() {
       if (filters.uf) params.set("uf", filters.uf);
       if (filters.search) params.set("search", filters.search);
       if (filters.priority) params.set("priority", filters.priority);
-      if (filters.deadlineUntil) params.set("deadline_until", filters.deadlineUntil);
       if (filters.sortBy) params.set("sort_by", filters.sortBy);
       if (filters.period) params.set("period", filters.period);
       if (filters.analyzed) params.set("analyzed", filters.analyzed);
@@ -303,7 +299,6 @@ export default function LicitacoesPage() {
     filters.phase,
     filters.uf,
     filters.priority,
-    filters.deadlineUntil,
     filters.sortBy !== "deadline" && filters.sortBy,
     filters.period,
     filters.analyzed,
@@ -459,21 +454,23 @@ export default function LicitacoesPage() {
               ))}
             </SelectContent>
           </Select>
-          <div className="flex items-center gap-2">
-            <Calendar className="h-3.5 w-3.5 text-slate-500" />
-            <Input
-              type="date"
-              value={filters.deadlineUntil}
-              onChange={(e) =>
-                setFilters((f) => ({ ...f, deadlineUntil: e.target.value }))
-              }
-              placeholder="Encerramento ate"
-              className="w-44 border-slate-700/50 bg-slate-800/50 text-sm h-9"
-            />
-            {filters.deadlineUntil && (
-              <span className="text-[11px] text-slate-400">ate {new Date(filters.deadlineUntil + "T00:00:00").toLocaleDateString("pt-BR")}</span>
-            )}
-          </div>
+          <Select
+            value={filters.uf || "ALL"}
+            onValueChange={(v) =>
+              setFilters((f) => ({ ...f, uf: v === "ALL" ? "" : v }))
+            }
+          >
+            <SelectTrigger className="w-32 border-slate-700/50 bg-slate-800/50 text-sm">
+              <MapPin className="h-3.5 w-3.5 mr-1 text-slate-400" />
+              <SelectValue placeholder="Estado" />
+            </SelectTrigger>
+            <SelectContent className="border-slate-700 bg-slate-800">
+              <SelectItem value="ALL">Todos Estados</SelectItem>
+              {["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((uf) => (
+                <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={filters.sortBy} onValueChange={(v) => { setFilters(f => ({...f, sortBy: v})); }}>
             <SelectTrigger className="w-[180px] bg-slate-900 border-slate-700">
               <SelectValue placeholder="Ordenar por..." />
@@ -495,7 +492,6 @@ export default function LicitacoesPage() {
                   uf: "",
                   search: filters.search,
                   priority: "",
-                  deadlineUntil: "",
                   sortBy: "deadline",
                   period: "",
                   analyzed: "",

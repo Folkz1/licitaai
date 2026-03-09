@@ -11,7 +11,15 @@ import {
   Ban,
   Brain,
   Loader2,
+  MapPin,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   DndContext,
   DragOverlay,
@@ -45,6 +53,7 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPriority, setFilterPriority] = useState<string>("");
+  const [filterUf, setFilterUf] = useState<string>("");
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [showRejected, setShowRejected] = useState(false);
   const [rejectedItems, setRejectedItems] = useState<PipelineItem[]>([]);
@@ -104,8 +113,11 @@ export default function PipelinePage() {
     if (filterPriority) {
       result = result.filter((i) => i.prioridade === filterPriority);
     }
+    if (filterUf) {
+      result = result.filter((i) => i.uf === filterUf);
+    }
     return result;
-  }, [items, searchQuery, filterPriority]);
+  }, [items, searchQuery, filterPriority, filterUf]);
 
   const stats = useMemo(() => {
     const active = items.filter((i) => i.review_phase !== "REJEITADA" && i.review_phase !== "CONCLUIDA" && i.tipo_oportunidade !== "PRE_TRIAGEM_REJEITAR");
@@ -329,6 +341,18 @@ export default function PipelinePage() {
             </Button>
           ))}
         </div>
+        <Select value={filterUf || "ALL"} onValueChange={(v) => setFilterUf(v === "ALL" ? "" : v)}>
+          <SelectTrigger className="h-7 w-28 border-slate-700/50 bg-slate-900 text-xs text-slate-400">
+            <MapPin className="h-3 w-3 mr-1" />
+            <SelectValue placeholder="Estado" />
+          </SelectTrigger>
+          <SelectContent className="border-slate-700 bg-slate-800">
+            <SelectItem value="ALL">Todos UF</SelectItem>
+            {["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map((uf) => (
+              <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button
           size="sm"
           variant="ghost"
