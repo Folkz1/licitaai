@@ -1,40 +1,21 @@
 "use client";
 
 import { useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   X,
   Upload,
   FileText,
   Brain,
-  Plus,
   Loader2,
   CheckCircle2,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Link as LinkIcon,
 } from "lucide-react";
-
-const UFS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
-
-const MODALIDADES = [
-  "Pregão Eletrônico",
-  "Pregão Presencial",
-  "Concorrência",
-  "Tomada de Preços",
-  "Convite",
-  "Concurso",
-  "Leilão",
-  "Dispensa de Licitação",
-  "Inexigibilidade",
-  "Outro",
-];
 
 interface NovaLicitacaoModalProps {
   onClose: () => void;
@@ -43,352 +24,200 @@ interface NovaLicitacaoModalProps {
 
 type Step = "form" | "analyzing" | "done";
 
-interface FormState {
-  orgao_nome: string;
-  objeto_compra: string;
-  valor_total_estimado: string;
-  uf: string;
-  municipio: string;
-  modalidade_contratacao: string;
-  tipo_participacao: string;
-  data_encerramento_proposta: string;
-  link_sistema_origem: string;
-  numero_controle_pncp: string;
-  informacao_complementar: string;
-}
-
 export function NovaLicitacaoModal({ onClose, onSuccess }: NovaLicitacaoModalProps) {
+  const router = useRouter();
   const [step, setStep] = useState<Step>("form");
-  const [form, setForm] = useState<FormState>({
-    orgao_nome: "",
-    objeto_compra: "",
-    valor_total_estimado: "",
-    uf: "",
-    municipio: "",
-    modalidade_contratacao: "",
-    tipo_participacao: "",
-    data_encerramento_proposta: "",
-    link_sistema_origem: "",
-    numero_controle_pncp: "",
-    informacao_complementar: "",
-  });
+  const [inputMode, setInputMode] = useState<"file" | "text">("file");
   const [editalText, setEditalText] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [inputMode, setInputMode] = useState<"none" | "text" | "file">("none");
+  const [linkOrigem, setLinkOrigem] = useState("");
+  const [showExtras, setShowExtras] = useState(false);
+  const [orgaoNome, setOrgaoNome] = useState("");
+  const [objetoCompra, setObjetoCompra] = useState("");
   const [saving, setSaving] = useState(false);
-  const [analyzeAfterSave, setAnalyzeAfterSave] = useState(false);
-  const [result, setResult] = useState<{ prioridade?: string; review_phase?: string; error?: string } | null>(null);
-  const [createdId, setCreatedId] = useState<string | null>(null);
-  const [progressMsg, setProgressMsg] = useState("Criando licitação...");
+  const [progressMsg, setProgressMsg] = useState("");
+  const [result, setResult] = useState<{
+    id?: string;
+    prioridade?: string;
+    review_phase?: string;
+    error?: string;
+  } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  function setField(key: keyof FormState, value: string) {
-    setForm((f) => ({ ...f, [key]: value }));
-  }
+  const hasEdital = (inputMode === "file" && file) || (inputMode === "text" && editalText.trim().length > 50);
 
-  async function handleSubmit(andAnalyze: boolean) {
-    if (!form.orgao_nome.trim() || !form.objeto_compra.trim()) return;
+  async function handleAnalyze() {
+    if (!hasEdital) return;
 
     setSaving(true);
-    setAnalyzeAfterSave(andAnalyze);
+    setStep("analyzing");
+    setProgressMsg(inputMode === "file" ? "Enviando PDF para OCR..." : "Preparando análise...");
 
     try {
-      // 1. Create licitação
-      const res = await fetch("/api/licitacoes", {
+      // Single POST that creates + analyzes
+      const fd = new FormData();
+
+      if (inputMode === "file" && file) {
+        fd.append("file", file);
+      } else if (inputMode === "text") {
+        fd.append("edital_text", editalText);
+      }
+
+      // Optional extras
+      if (linkOrigem.trim()) fd.append("link_sistema_origem", linkOrigem.trim());
+      if (orgaoNome.trim()) fd.append("orgao_nome", orgaoNome.trim());
+      if (objetoCompra.trim()) fd.append("objeto_compra", objetoCompra.trim());
+
+      setProgressMsg("Analisando edital com IA...");
+
+      const res = await fetch("/api/licitacoes/analisar-edital", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          valor_total_estimado: form.valor_total_estimado
-            ? parseFloat(form.valor_total_estimado.replace(/\./g, "").replace(",", "."))
-            : null,
-        }),
+        body: fd,
       });
 
       const data = await res.json();
+
       if (!res.ok) {
-        alert(data.error || "Erro ao salvar");
-        setSaving(false);
+        setResult({ error: data.error || "Erro ao analisar" });
+        setStep("done");
         return;
       }
 
-      const id = data.id;
-      setCreatedId(id);
-
-      if (!andAnalyze) {
-        onSuccess(id);
-        return;
-      }
-
-      // 2. Trigger analysis
-      setStep("analyzing");
-      setProgressMsg("Analisando com IA...");
-
-      let analyzeRes: Response;
-
-      if (inputMode === "file" && file) {
-        setProgressMsg("Enviando arquivo para OCR...");
-        const fd = new FormData();
-        fd.append("file", file);
-        analyzeRes = await fetch(`/api/licitacoes/${id}/analyze`, {
-          method: "POST",
-          body: fd,
-        });
-      } else if (inputMode === "text" && editalText.trim().length > 10) {
-        setProgressMsg("Analisando edital...");
-        analyzeRes = await fetch(`/api/licitacoes/${id}/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ edital_text: editalText }),
-        });
-      } else {
-        // Analyze by objeto only
-        setProgressMsg("Analisando pelo objeto da compra...");
-        analyzeRes = await fetch(`/api/licitacoes/${id}/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
-        });
-      }
-
-      const analyzeData = await analyzeRes.json();
-      setResult(analyzeData);
+      setResult({
+        id: data.id,
+        prioridade: data.prioridade,
+        review_phase: data.review_phase,
+      });
       setStep("done");
-      onSuccess(id);
+      if (data.id) onSuccess(data.id);
     } catch (err) {
-      alert("Erro inesperado: " + (err instanceof Error ? err.message : "desconhecido"));
-      setSaving(false);
+      setResult({ error: err instanceof Error ? err.message : "Erro inesperado" });
+      setStep("done");
     }
   }
 
-  const prioridadeConfig: Record<string, { label: string; color: string }> = {
-    P1: { label: "Alta Prioridade", color: "text-red-400" },
-    P2: { label: "Média Prioridade", color: "text-amber-400" },
-    P3: { label: "Baixa Prioridade", color: "text-blue-400" },
-    REJEITAR: { label: "Rejeitada", color: "text-slate-400" },
+  function handleViewResult() {
+    if (result?.id) {
+      router.push(`/licitacoes/${result.id}`);
+    }
+    onClose();
+  }
+
+  const prioridadeConfig: Record<string, { label: string; color: string; bg: string }> = {
+    P1: { label: "Alta Prioridade", color: "text-red-400", bg: "bg-red-500/20 border-red-500/30" },
+    P2: { label: "Média Prioridade", color: "text-amber-400", bg: "bg-amber-500/20 border-amber-500/30" },
+    P3: { label: "Baixa Prioridade", color: "text-blue-400", bg: "bg-blue-500/20 border-blue-500/30" },
+    REJEITAR: { label: "Não Relevante", color: "text-slate-400", bg: "bg-slate-500/20 border-slate-500/30" },
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
+      <div className="w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <div className="flex items-center gap-2">
-            <Plus className="h-5 w-5 text-indigo-400" />
-            <h2 className="text-lg font-semibold text-white">Nova Licitação Manual</h2>
+            <Brain className="h-5 w-5 text-indigo-400" />
+            <h2 className="text-lg font-semibold text-white">Analisar Edital</h2>
           </div>
           <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Analyzing step */}
+        {/* Analyzing */}
         {step === "analyzing" && (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-16">
             <div className="relative">
-              <Brain className="h-12 w-12 text-indigo-400" />
+              <Brain className="h-14 w-14 text-indigo-400 animate-pulse" />
               <Loader2 className="absolute -top-1 -right-1 h-5 w-5 animate-spin text-indigo-300" />
             </div>
-            <p className="text-slate-300 font-medium">{progressMsg}</p>
-            <p className="text-xs text-slate-500">Isso pode levar até 2 minutos...</p>
+            <p className="text-slate-200 font-medium text-lg">{progressMsg}</p>
+            <p className="text-xs text-slate-500">Isso pode levar até 2 minutos para PDFs grandes...</p>
+            <div className="w-48 h-1 bg-slate-800 rounded-full overflow-hidden mt-2">
+              <div className="h-full bg-indigo-500 rounded-full animate-pulse" style={{ width: "60%" }} />
+            </div>
           </div>
         )}
 
-        {/* Done step */}
+        {/* Done */}
         {step === "done" && result && (
           <div className="flex flex-col items-center justify-center gap-4 px-6 py-12">
             {result.error ? (
               <>
                 <AlertTriangle className="h-12 w-12 text-amber-400" />
-                <p className="text-amber-300 font-medium">Análise falhou</p>
-                <p className="text-xs text-slate-400">{result.error}</p>
+                <p className="text-amber-300 font-medium text-lg">Erro na análise</p>
+                <p className="text-sm text-slate-400 text-center max-w-sm">{result.error}</p>
+                <Button variant="outline" onClick={() => { setStep("form"); setSaving(false); }} className="mt-2 border-slate-600 text-slate-300">
+                  Tentar novamente
+                </Button>
               </>
             ) : (
               <>
-                <CheckCircle2 className="h-12 w-12 text-emerald-400" />
-                <p className="text-emerald-300 font-medium text-lg">Análise concluída!</p>
+                <CheckCircle2 className="h-14 w-14 text-emerald-400" />
+                <p className="text-emerald-300 font-medium text-xl">Análise concluída!</p>
                 {result.prioridade && (
-                  <span className={`text-2xl font-bold ${prioridadeConfig[result.prioridade]?.color || "text-white"}`}>
-                    {result.prioridade} — {prioridadeConfig[result.prioridade]?.label}
-                  </span>
+                  <div className={`rounded-lg border px-6 py-3 ${prioridadeConfig[result.prioridade]?.bg || ""}`}>
+                    <span className={`text-3xl font-bold ${prioridadeConfig[result.prioridade]?.color || "text-white"}`}>
+                      {result.prioridade}
+                    </span>
+                    <span className="text-slate-300 ml-3 text-lg">
+                      {prioridadeConfig[result.prioridade]?.label}
+                    </span>
+                  </div>
                 )}
+                <div className="flex gap-3 mt-4">
+                  <Button variant="outline" onClick={onClose} className="border-slate-600 text-slate-300">
+                    Fechar
+                  </Button>
+                  <Button onClick={handleViewResult} className="bg-indigo-600 hover:bg-indigo-700 gap-1.5">
+                    <FileText className="h-4 w-4" />
+                    Ver análise completa
+                  </Button>
+                </div>
               </>
             )}
-            <Button
-              className="mt-4 bg-indigo-600 hover:bg-indigo-700"
-              onClick={onClose}
-            >
-              Ver na lista
-            </Button>
           </div>
         )}
 
-        {/* Form step */}
+        {/* Form */}
         {step === "form" && (
           <div className="px-6 py-5 space-y-5">
-            {/* Required */}
+            {/* Main: edital input */}
             <div className="space-y-3">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Informações Básicas *</p>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Órgão / Entidade *</label>
-                <Input
-                  value={form.orgao_nome}
-                  onChange={(e) => setField("orgao_nome", e.target.value)}
-                  placeholder="Ex: Prefeitura Municipal de São Paulo"
-                  className="bg-slate-800 border-slate-700 text-white"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Objeto da Compra *</label>
-                <textarea
-                  value={form.objeto_compra}
-                  onChange={(e) => setField("objeto_compra", e.target.value)}
-                  placeholder="Descreva o objeto da licitação..."
-                  rows={3}
-                  className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none resize-none"
-                />
-              </div>
-            </div>
+              <p className="text-sm font-medium text-white">Envie o edital para análise</p>
+              <p className="text-xs text-slate-400">
+                A IA extrai automaticamente todos os dados: órgão, objeto, itens, prazos, valores e prioridade.
+              </p>
 
-            {/* Details */}
-            <div className="space-y-3">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Detalhes</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Valor Estimado (R$)</label>
-                  <Input
-                    value={form.valor_total_estimado}
-                    onChange={(e) => setField("valor_total_estimado", e.target.value)}
-                    placeholder="Ex: 150000"
-                    className="bg-slate-800 border-slate-700 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Encerramento</label>
-                  <Input
-                    type="date"
-                    value={form.data_encerramento_proposta}
-                    onChange={(e) => setField("data_encerramento_proposta", e.target.value)}
-                    className="bg-slate-800 border-slate-700 text-white"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Estado (UF)</label>
-                  <Select value={form.uf || "NONE"} onValueChange={(v) => setField("uf", v === "NONE" ? "" : v)}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-sm text-white">
-                      <SelectValue placeholder="Selecionar" />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-800">
-                      <SelectItem value="NONE">Não informado</SelectItem>
-                      {UFS.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Município</label>
-                  <Input
-                    value={form.municipio}
-                    onChange={(e) => setField("municipio", e.target.value)}
-                    placeholder="Ex: São Paulo"
-                    className="bg-slate-800 border-slate-700 text-white"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Modalidade</label>
-                  <Select value={form.modalidade_contratacao || "NONE"} onValueChange={(v) => setField("modalidade_contratacao", v === "NONE" ? "" : v)}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-sm text-white">
-                      <SelectValue placeholder="Selecionar" />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-800">
-                      <SelectItem value="NONE">Não informado</SelectItem>
-                      {MODALIDADES.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">Tipo Participação</label>
-                  <Select value={form.tipo_participacao || "NONE"} onValueChange={(v) => setField("tipo_participacao", v === "NONE" ? "" : v)}>
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-sm text-white">
-                      <SelectValue placeholder="Selecionar" />
-                    </SelectTrigger>
-                    <SelectContent className="border-slate-700 bg-slate-800">
-                      <SelectItem value="NONE">Não informado</SelectItem>
-                      <SelectItem value="ABERTA">Aberta</SelectItem>
-                      <SelectItem value="ME/EPP">ME/EPP</SelectItem>
-                      <SelectItem value="RESTRITA">Restrita</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Link do Sistema / Edital</label>
-                <Input
-                  value={form.link_sistema_origem}
-                  onChange={(e) => setField("link_sistema_origem", e.target.value)}
-                  placeholder="https://..."
-                  className="bg-slate-800 border-slate-700 text-white"
-                />
-              </div>
-              <div>
-                <label className="text-xs text-slate-400 mb-1 block">Número PNCP / Protocolo (opcional)</label>
-                <Input
-                  value={form.numero_controle_pncp}
-                  onChange={(e) => setField("numero_controle_pncp", e.target.value)}
-                  placeholder="Ex: 12345678000190-1-000123/2025"
-                  className="bg-slate-800 border-slate-700 text-white"
-                />
-              </div>
-            </div>
-
-            {/* Edital content */}
-            <div className="space-y-3">
-              <p className="text-xs font-medium text-slate-400 uppercase tracking-wider">Conteúdo do Edital (para análise mais precisa)</p>
+              {/* Toggle file/text */}
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setInputMode(inputMode === "text" ? "none" : "text")}
-                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                    inputMode === "text"
-                      ? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
-                      : "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
-                  }`}
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  Colar texto
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setInputMode(inputMode === "file" ? "none" : "file")}
-                  className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                  onClick={() => setInputMode("file")}
+                  className={`flex items-center gap-1.5 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
                     inputMode === "file"
                       ? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
                       : "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
                   }`}
                 >
-                  <Upload className="h-3.5 w-3.5" />
+                  <Upload className="h-4 w-4" />
                   Upload PDF
                 </button>
-                {inputMode === "none" && (
-                  <span className="flex items-center text-xs text-slate-500 ml-1">
-                    ↑ Sem edital: IA analisa só pelo objeto
-                  </span>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setInputMode("text")}
+                  className={`flex items-center gap-1.5 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
+                    inputMode === "text"
+                      ? "border-indigo-500 bg-indigo-500/20 text-indigo-300"
+                      : "border-slate-700 text-slate-400 hover:text-white hover:border-slate-500"
+                  }`}
+                >
+                  <FileText className="h-4 w-4" />
+                  Colar texto
+                </button>
               </div>
 
-              {inputMode === "text" && (
-                <textarea
-                  value={editalText}
-                  onChange={(e) => setEditalText(e.target.value)}
-                  placeholder="Cole aqui o conteúdo do edital, TR, minuta ou qualquer documento relevante..."
-                  rows={6}
-                  className="w-full rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none resize-none"
-                />
-              )}
-
+              {/* File upload */}
               {inputMode === "file" && (
                 <div>
                   <input
@@ -400,53 +229,110 @@ export function NovaLicitacaoModal({ onClose, onSuccess }: NovaLicitacaoModalPro
                   />
                   <div
                     onClick={() => fileRef.current?.click()}
-                    className="flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-slate-700 bg-slate-800/30 p-6 cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-500/5 transition-colors"
+                    className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-8 cursor-pointer transition-colors ${
+                      file
+                        ? "border-indigo-500/50 bg-indigo-500/10"
+                        : "border-slate-700 bg-slate-800/30 hover:border-indigo-500/50 hover:bg-indigo-500/5"
+                    }`}
                   >
                     {file ? (
                       <>
-                        <FileText className="h-8 w-8 text-indigo-400" />
+                        <FileText className="h-10 w-10 text-indigo-400" />
                         <p className="text-sm text-white font-medium">{file.name}</p>
                         <p className="text-xs text-slate-400">{(file.size / 1024).toFixed(0)} KB — clique para trocar</p>
                       </>
                     ) : (
                       <>
-                        <Upload className="h-8 w-8 text-slate-500" />
-                        <p className="text-sm text-slate-400">Clique para selecionar PDF ou DOC</p>
-                        <p className="text-xs text-slate-500">O arquivo será enviado para OCR antes da análise</p>
+                        <Upload className="h-10 w-10 text-slate-500" />
+                        <p className="text-sm text-slate-300">Arraste o PDF aqui ou clique para selecionar</p>
+                        <p className="text-xs text-slate-500">PDF, DOC ou DOCX — será processado por OCR</p>
                       </>
                     )}
                   </div>
                 </div>
               )}
+
+              {/* Text paste */}
+              {inputMode === "text" && (
+                <div>
+                  <textarea
+                    value={editalText}
+                    onChange={(e) => setEditalText(e.target.value)}
+                    placeholder="Cole aqui o conteúdo completo do edital, TR, minuta ou qualquer documento relevante..."
+                    rows={8}
+                    className="w-full rounded-md border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none resize-y"
+                  />
+                  {editalText.length > 0 && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      {editalText.length.toLocaleString("pt-BR")} caracteres
+                      {editalText.length < 50 && " — mínimo 50 caracteres"}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* Actions */}
+            {/* Link da origem (always visible, compact) */}
+            <div>
+              <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                <LinkIcon className="h-3 w-3" />
+                Link da licitação (opcional)
+              </label>
+              <Input
+                value={linkOrigem}
+                onChange={(e) => setLinkOrigem(e.target.value)}
+                placeholder="https://compras.gov.br/... ou URL do portal"
+                className="bg-slate-800 border-slate-700 text-white text-sm"
+              />
+            </div>
+
+            {/* Expandable extras */}
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowExtras(!showExtras)}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-300 transition-colors"
+              >
+                {showExtras ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                Informações adicionais (opcional)
+              </button>
+              {showExtras && (
+                <div className="mt-3 space-y-3 pl-1">
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">Órgão / Entidade</label>
+                    <Input
+                      value={orgaoNome}
+                      onChange={(e) => setOrgaoNome(e.target.value)}
+                      placeholder="Se não informar, a IA extrai do edital"
+                      className="bg-slate-800 border-slate-700 text-white text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-400 mb-1 block">Objeto da Compra</label>
+                    <Input
+                      value={objetoCompra}
+                      onChange={(e) => setObjetoCompra(e.target.value)}
+                      placeholder="Se não informar, a IA extrai do edital"
+                      className="bg-slate-800 border-slate-700 text-white text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action */}
             <div className="flex items-center justify-between border-t border-slate-800 pt-4">
               <Button variant="ghost" onClick={onClose} className="text-slate-400">
                 Cancelar
               </Button>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => handleSubmit(false)}
-                  disabled={saving || !form.orgao_nome.trim() || !form.objeto_compra.trim()}
-                  className="border-slate-600 text-slate-300 hover:text-white"
-                >
-                  {saving && !analyzeAfterSave ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Salvar
-                </Button>
-                <Button
-                  onClick={() => handleSubmit(true)}
-                  disabled={saving || !form.orgao_nome.trim() || !form.objeto_compra.trim()}
-                  className="bg-indigo-600 hover:bg-indigo-700 gap-1.5"
-                >
-                  {saving && analyzeAfterSave
-                    ? <Loader2 className="h-4 w-4 animate-spin" />
-                    : <Brain className="h-4 w-4" />
-                  }
-                  Salvar e Analisar
-                </Button>
-              </div>
+              <Button
+                onClick={handleAnalyze}
+                disabled={saving || !hasEdital}
+                className="bg-indigo-600 hover:bg-indigo-700 gap-2 px-6 py-2.5 text-base"
+              >
+                <Brain className="h-5 w-5" />
+                Analisar com IA
+              </Button>
             </div>
           </div>
         )}
