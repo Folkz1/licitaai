@@ -23,6 +23,20 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   const results: { tenant_id: string; workflow: string; status: string; error?: string }[] = [];
 
+  // Cleanup: mark stale RUNNING executions as ERROR (stuck > 30min)
+  try {
+    const staleCount = await query(
+      `UPDATE workflow_executions SET status = 'ERROR', finished_at = NOW(),
+        error_message = 'Timeout: Execução expirada (30min)',
+        current_step = 'Timeout: execucao expirada'
+      WHERE status = 'RUNNING' AND started_at < NOW() - INTERVAL '30 minutes'
+      RETURNING id`
+    );
+    if (staleCount.length > 0) {
+      console.log(`[CRON] Cleaned up ${staleCount.length} stale RUNNING executions`);
+    }
+  } catch { /* non-critical */ }
+
   // Find all schedules that are due (next_run_at <= now OR next_run_at is null and should run now)
   const dueSchedules = await query<{
     id: string;
@@ -63,6 +77,7 @@ export async function GET(req: NextRequest) {
       continue;
     }
 
+    let executionId: string | undefined;
     try {
       if (schedule.workflow === "BUSCA_PNCP") {
         // Create execution record
@@ -72,9 +87,10 @@ export async function GET(req: NextRequest) {
            RETURNING id`,
           [schedule.tenant_id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada pelo cron (code)", level: "info" }])]
         );
+        executionId = execution?.id;
 
         // Execute search directly (no N8N dependency)
-        await executarBusca(schedule.tenant_id, execution?.id);
+        await executarBusca(schedule.tenant_id, executionId);
       } else if (schedule.workflow === "ANALISE_EDITAIS") {
         // Create execution record
         const execution = await queryOne<{ id: string }>(
@@ -83,9 +99,13 @@ export async function GET(req: NextRequest) {
            RETURNING id`,
           [schedule.tenant_id, JSON.stringify([{ time: new Date().toISOString(), message: "Analise disparada pelo cron (code)", level: "info" }])]
         );
+        executionId = execution?.id;
 
-        // Execute analysis directly (no N8N dependency)
-        await executarAnalise(schedule.tenant_id, execution?.id);
+        // Pass max_licitacoes from schedule params (default 20)
+        const maxLic = (schedule.params?.max_licitacoes as number) || 20;
+        // Cap at 30 per execution to avoid timeouts (each analysis can take 1-3 min)
+        const safeBatch = Math.min(maxLic, 30);
+        await executarAnalise(schedule.tenant_id, executionId, undefined, safeBatch);
       }
 
       // Update schedule: set last_run, increment count, calculate next_run
@@ -100,6 +120,25 @@ export async function GET(req: NextRequest) {
       results.push({ tenant_id: schedule.tenant_id, workflow: schedule.workflow, status: "triggered" });
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unknown error";
+
+      // Update workflow_execution to ERROR (prevents ghost RUNNING records)
+      if (executionId) {
+        try {
+          await query(
+            `UPDATE workflow_executions SET status = 'ERROR', finished_at = NOW(),
+              error_message = $2,
+              current_step = $3,
+              logs = COALESCE(logs, '[]'::jsonb) || $4::jsonb
+            WHERE id = $1 AND status = 'RUNNING'`,
+            [
+              executionId,
+              msg.slice(0, 500),
+              `Erro: ${msg.slice(0, 200)}`,
+              JSON.stringify([{ time: new Date().toISOString(), message: msg, level: "error" }]),
+            ]
+          );
+        } catch { /* don't fail the schedule update */ }
+      }
 
       await query(
         `UPDATE cron_schedules SET last_status = $1, updated_at = NOW() WHERE id = $2`,

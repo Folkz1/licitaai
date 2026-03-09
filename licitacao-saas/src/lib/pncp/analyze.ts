@@ -373,15 +373,16 @@ ${ctx.palavras_exclusao.join(", ") || "Nenhum"}
 ## SUA TAREFA
 Analise o objeto da licitacao e decida se PODE ter itens relevantes para esta empresa.
 
-## CRITERIOS DE REJEICAO (responda REJEITAR)
+## CRITERIOS DE REJEICAO (responda REJEITAR, confianca >= 80)
 - Produtos/servicos listados em EXCLUSAO
-- Itens claramente fora do segmento da empresa
-- Licitacoes de outro setor completamente diferente
+- Licitacoes de outro setor COMPLETAMENTE diferente (ex: obras civis, veiculos, alimentos para empresa de papelaria)
+- SOMENTE rejeite se tiver CERTEZA ABSOLUTA que nao ha nenhum item relevante
 
 ## CRITERIOS PARA ANALISE (responda ANALISAR)
 - Mencao a qualquer palavra de INCLUSAO
 - Produtos/servicos similares aos oferecidos
-- Licitacoes genericas que podem incluir itens relevantes
+- Licitacoes genericas que PODEM incluir itens relevantes (material de escritorio, expediente, etc)
+- NA DUVIDA, SEMPRE envie para analise. E melhor analisar uma licitacao irrelevante do que perder uma relevante.
 
 ## FORMATO DE RESPOSTA
 Responda APENAS com JSON valido:
@@ -401,7 +402,20 @@ Responda APENAS com JSON valido:
   try {
     // Strip markdown fences if present
     const cleaned = result.content.replace(/```json?\s*\n?/g, "").replace(/```\s*$/g, "").trim();
-    return JSON.parse(cleaned);
+    const parsed = JSON.parse(cleaned) as PreTriagemResult;
+
+    // B1 FIX: If IA rejects with low confidence, override to ANALISAR
+    // This prevents false negatives on borderline cases (e.g., "papelaria" tenders
+    // with generic titles that the LLM isn't sure about)
+    if (parsed.decisao === "REJEITAR" && (parsed.confianca || 0) < 75) {
+      return {
+        decisao: "ANALISAR",
+        motivo: `Override: rejeicao com confianca baixa (${parsed.confianca}%). Motivo original: ${parsed.motivo}`,
+        confianca: parsed.confianca,
+      };
+    }
+
+    return parsed;
   } catch {
     return { decisao: "ANALISAR", motivo: "Erro ao parsear resposta, enviando para analise", confianca: 50 };
   }
