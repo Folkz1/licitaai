@@ -77,6 +77,14 @@ export async function GET(req: NextRequest) {
     whereClause += ` AND a.id IS NULL`;
   }
 
+  const excludePhase = searchParams.get("exclude_phase");
+  if (excludePhase) {
+    const excluded = excludePhase.split(",").map((_, i) => `$${paramCount + 1 + i}`);
+    excludePhase.split(",").forEach((p) => params.push(p));
+    paramCount += excludePhase.split(",").length;
+    whereClause += ` AND l.review_phase NOT IN (${excluded.join(",")})`;
+  }
+
   const sortBy = searchParams.get("sort_by") || "deadline";
   const orderBy = sortBy === "publicacao"
     ? "ORDER BY l.data_publicacao DESC NULLS LAST"

@@ -70,7 +70,7 @@ export default function PipelinePage() {
     // Silent update if we already have items to avoid flickering
     if (items.length === 0) setLoading(true);
     try {
-      const res = await fetch("/api/licitacoes?limit=500");
+      const res = await fetch("/api/licitacoes?limit=5000");
       const data = await res.json();
       setItems(data.data || []);
     } finally {
