@@ -12,7 +12,9 @@ import {
   Brain,
   Loader2,
   MapPin,
+  Plus,
 } from "lucide-react";
+import { NovaLicitacaoModal } from "@/components/dashboard/NovaLicitacaoModal";
 import {
   Select,
   SelectContent,
@@ -61,6 +63,8 @@ export default function PipelinePage() {
   const [noteModal, setNoteModal] = useState<{ id: string; toPhase: string } | null>(null);
   const [noteText, setNoteText] = useState("");
   
+  const [showNovaModal, setShowNovaModal] = useState(false);
+
   // Workflow Trigger States
   const [triggeringBusca, setTriggeringBusca] = useState(false);
   const [triggeringAnalise, setTriggeringAnalise] = useState(false);
@@ -249,6 +253,15 @@ export default function PipelinePage() {
 
   return (
     <div className="flex h-full flex-col space-y-4">
+      {showNovaModal && (
+        <NovaLicitacaoModal
+          onClose={() => setShowNovaModal(false)}
+          onSuccess={() => {
+            setShowNovaModal(false);
+            fetchData();
+          }}
+        />
+      )}
       {/* Header with Toolbar */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-1">
         <div>
@@ -258,6 +271,14 @@ export default function PipelinePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={() => setShowNovaModal(true)}
+            className="bg-indigo-600 hover:bg-indigo-700 gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Nova
+          </Button>
            <Button
             variant="outline"
             size="sm"

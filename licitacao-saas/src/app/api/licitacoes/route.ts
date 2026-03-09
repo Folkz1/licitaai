@@ -1,6 +1,7 @@
 import { getEffectiveTenantId } from "@/lib/tenant";
-import { query } from "@/lib/db";
+import { query, queryOne } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
 export async function GET(req: NextRequest) {
   let tenantId: string;
@@ -138,4 +139,66 @@ export async function GET(req: NextRequest) {
       totalPages: Math.ceil(parseInt((countResult[0] as { total: string }).total) / limit),
     },
   });
+}
+
+// POST /api/licitacoes — criar licitação manualmente
+export async function POST(req: NextRequest) {
+  let tenantId: string;
+  try {
+    ({ tenantId } = await getEffectiveTenantId());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const body = await req.json();
+  const {
+    orgao_nome,
+    objeto_compra,
+    valor_total_estimado,
+    uf,
+    municipio,
+    modalidade_contratacao,
+    tipo_participacao,
+    data_encerramento_proposta,
+    data_publicacao,
+    link_sistema_origem,
+    numero_controle_pncp, // optional — from external system
+    informacao_complementar,
+  } = body;
+
+  if (!orgao_nome || !objeto_compra) {
+    return NextResponse.json({ error: "orgao_nome e objeto_compra sao obrigatorios" }, { status: 400 });
+  }
+
+  // Generate fake NCP for manual entries (must be unique per tenant)
+  const ncp = numero_controle_pncp || `MANUAL-${randomUUID()}`;
+
+  // Check for duplicate NCP
+  const existing = await queryOne<{ id: string }>(
+    `SELECT id FROM licitacoes WHERE tenant_id = $1 AND numero_controle_pncp = $2`,
+    [tenantId, ncp]
+  );
+  if (existing) {
+    return NextResponse.json({ error: "Licitacao com esse numero ja existe", id: existing.id }, { status: 409 });
+  }
+
+  const row = await queryOne<{ id: string }>(
+    `INSERT INTO licitacoes (
+      tenant_id, numero_controle_pncp, orgao_nome, objeto_compra,
+      valor_total_estimado, uf, municipio, modalidade_contratacao,
+      tipo_participacao, data_encerramento_proposta, data_publicacao,
+      link_sistema_origem, informacao_complementar,
+      status, review_phase, passou_pre_triagem
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'NOVA','NOVA',true)
+    RETURNING id`,
+    [
+      tenantId, ncp, orgao_nome, objeto_compra,
+      valor_total_estimado || null, uf || null, municipio || null,
+      modalidade_contratacao || null, tipo_participacao || null,
+      data_encerramento_proposta || null, data_publicacao || null,
+      link_sistema_origem || null, informacao_complementar || null,
+    ]
+  );
+
+  return NextResponse.json({ id: row?.id }, { status: 201 });
 }

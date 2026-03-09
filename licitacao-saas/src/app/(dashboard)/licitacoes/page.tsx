@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NovaLicitacaoModal } from "@/components/dashboard/NovaLicitacaoModal";
 import {
   Select,
   SelectContent,
@@ -21,6 +22,7 @@ import {
   MapPin,
   Building2,
   DollarSign,
+  Plus,
   AlertTriangle,
   Clock,
   CheckCircle2,
@@ -235,6 +237,7 @@ export default function LicitacoesPage() {
     parseInt(searchParams.get("limit") || String(DEFAULT_PAGE_SIZE))
   );
   const [showFilters, setShowFilters] = useState(true);
+  const [showNovaModal, setShowNovaModal] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Sync state to URL (so back button preserves page/filters)
@@ -306,6 +309,15 @@ export default function LicitacoesPage() {
 
   return (
     <div className="space-y-5">
+      {showNovaModal && (
+        <NovaLicitacaoModal
+          onClose={() => setShowNovaModal(false)}
+          onSuccess={() => {
+            setShowNovaModal(false);
+            fetchData(1);
+          }}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -317,6 +329,14 @@ export default function LicitacoesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowNovaModal(true)}
+            size="sm"
+            className="bg-indigo-600 hover:bg-indigo-700 gap-1.5"
+          >
+            <Plus className="h-4 w-4" />
+            Nova Licitação
+          </Button>
           <Button
             onClick={() => setShowFilters(!showFilters)}
             variant="outline"

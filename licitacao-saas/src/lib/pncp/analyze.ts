@@ -1129,6 +1129,113 @@ async function appendDetailedLog(executionId: string | undefined, log: DetailedL
   }
 }
 
+// --- Single Licitação Analysis (for manual entries and re-analysis) ---
+
+export async function analyzeOneLicitacao(
+  licitacaoId: string,
+  tenantId: string,
+  editalText?: string // provided text bypasses OCR (for manual entries)
+): Promise<{ success: boolean; prioridade?: string; review_phase?: string; error?: string }> {
+  try {
+    // 1. Load tenant context
+    const ctx = await loadTenantContext(tenantId);
+    if (!ctx) return { success: false, error: "Tenant nao encontrado" };
+
+    // 2. Load licitação from DB
+    const licRow = await queryOne<PendingLicitacao>(
+      `SELECT l.id, l.numero_controle_pncp, l.cnpj_orgao, l.ano_compra, l.sequencial_compra,
+              l.orgao_nome, l.objeto_compra, l.valor_total_estimado, l.modalidade_contratacao,
+              l.tipo_participacao, l.uf, l.municipio, l.data_publicacao, l.data_encerramento_proposta,
+              l.link_sistema_origem,
+              CASE WHEN l.data_encerramento_proposta IS NULL THEN NULL
+                ELSE EXTRACT(DAY FROM (l.data_encerramento_proposta - NOW()))
+              END as dias_restantes
+       FROM licitacoes l WHERE l.id = $1 AND l.tenant_id = $2`,
+      [licitacaoId, tenantId]
+    );
+    if (!licRow) return { success: false, error: "Licitacao nao encontrada" };
+    const lic = licRow;
+
+    let ragContext = "";
+
+    if (editalText && editalText.length > 100) {
+      // Text provided directly (manual paste or pre-extracted)
+      const RAG_THRESHOLD = 500000;
+      if (editalText.length <= RAG_THRESHOLD) {
+        ragContext = `TEXTO COMPLETO DO EDITAL:\n\n${editalText}`;
+      } else {
+        ragContext = await buildRagContext(tenantId, licitacaoId, editalText, ctx.palavras_inclusao);
+      }
+
+      // Persist the text in editais table
+      await query(
+        `INSERT INTO editais (licitacao_id, arquivo_url, arquivo_nome, conteudo_texto, ocr_sucesso, ocr_metodo, tamanho_bytes)
+         VALUES ($1, '', 'manual.txt', $2, true, 'MANUAL', $3)
+         ON CONFLICT (licitacao_id) DO UPDATE SET
+           conteudo_texto = EXCLUDED.conteudo_texto, ocr_sucesso = true,
+           tamanho_bytes = EXCLUDED.tamanho_bytes, updated_at = NOW()`,
+        [licitacaoId, editalText, editalText.length]
+      );
+    } else if (!lic.numero_controle_pncp.startsWith("MANUAL-")) {
+      // Try PNCP files if this is a real PNCP entry
+      const files = await fetchPncpFiles(lic.numero_controle_pncp);
+      if (files.length > 0) {
+        const ocrDocs = files.slice(0, 5).map((f, idx) => ({
+          url: f.url, id: `${lic.id}_doc${idx + 1}`, nome: f.titulo, tipo: f.tipo,
+        }));
+        const ocrText = await callOcrSupremo(ocrDocs);
+        if (ocrText.length > 100) {
+          await query(
+            `INSERT INTO editais (licitacao_id, arquivo_url, arquivo_nome, conteudo_texto, ocr_sucesso, ocr_metodo, tamanho_bytes)
+             VALUES ($1, $2, $3, $4, true, 'OCR_SUPREMO', $5)
+             ON CONFLICT (licitacao_id) DO UPDATE SET
+               conteudo_texto = EXCLUDED.conteudo_texto, ocr_sucesso = true,
+               tamanho_bytes = EXCLUDED.tamanho_bytes, updated_at = NOW()`,
+            [licitacaoId, ocrDocs[0]?.url || "", ocrDocs[0]?.nome || "edital.pdf", ocrText, ocrText.length]
+          );
+          const RAG_THRESHOLD = 500000;
+          ragContext = ocrText.length <= RAG_THRESHOLD
+            ? `TEXTO COMPLETO DO EDITAL:\n\n${ocrText}`
+            : await buildRagContext(tenantId, licitacaoId, ocrText, ctx.palavras_inclusao);
+        }
+      }
+    } else {
+      // Manual entry without text: check if there's a previously stored edital
+      const stored = await queryOne<{ conteudo_texto: string }>(
+        `SELECT conteudo_texto FROM editais WHERE licitacao_id = $1 LIMIT 1`,
+        [licitacaoId]
+      );
+      if (stored?.conteudo_texto && stored.conteudo_texto.length > 100) {
+        ragContext = `TEXTO COMPLETO DO EDITAL:\n\n${stored.conteudo_texto}`;
+      }
+    }
+
+    // 3. Run full analysis
+    const analysisResult = await runFullAnalysis(lic, ctx, ragContext);
+    const normalized = normalizeAnalysis(analysisResult.data);
+
+    // 4. Save
+    await saveAnalysis(licitacaoId, undefined, normalized, {
+      raw: analysisResult.raw,
+      model: analysisResult.model,
+      tokens_in: analysisResult.tokens_in,
+      tokens_out: analysisResult.tokens_out,
+      time_ms: analysisResult.time_ms,
+    });
+
+    return {
+      success: true,
+      prioridade: normalized.prioridade,
+      review_phase: normalized.prioridade === "REJEITAR"
+        ? "REJEITADA"
+        : ["P1", "P2"].includes(normalized.prioridade) ? "PRE_TRIAGEM" : "ANALISE",
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    return { success: false, error: msg };
+  }
+}
+
 // --- Main Entry Point ---
 
 export async function executarAnalise(
