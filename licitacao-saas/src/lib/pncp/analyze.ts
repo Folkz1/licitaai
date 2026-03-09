@@ -1064,10 +1064,15 @@ async function saveAnalysis(
     );
   }
 
-  // Update licitacao status
+  // Update licitacao status + auto-advance P1/P2 to PRE_TRIAGEM pipeline
+  const phase = normalized.prioridade === "REJEITAR"
+    ? "REJEITADA"
+    : ["P1", "P2"].includes(normalized.prioridade)
+      ? "PRE_TRIAGEM"
+      : "ANALISE";
   await query(
-    `UPDATE licitacoes SET status = 'ANALISADA', review_phase = 'analyzed', updated_at = NOW() WHERE id = $1`,
-    [licitacaoId]
+    `UPDATE licitacoes SET status = 'ANALISADA', review_phase = $2, updated_at = NOW() WHERE id = $1`,
+    [licitacaoId, phase]
   );
 }
 

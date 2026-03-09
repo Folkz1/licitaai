@@ -570,21 +570,43 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                   <CardContent>
                     {(() => {
                       const parsed = parseJson(analise.analise_riscos);
-                      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                      if (Array.isArray(parsed)) {
                         return (
-                          <div className="space-y-2">
-                            {Object.entries(parsed).map(([key, value]) => (
-                              <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
-                                <span className="text-sm font-medium text-slate-400">
-                                  {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
-                                </span>
-                                <span className="text-sm text-white">{renderValue(value)}</span>
+                          <div className="space-y-3">
+                            {parsed.map((risk: unknown, i: number) => (
+                              <div key={i} className="rounded-lg bg-slate-800/50 px-3 py-2 space-y-1">
+                                {typeof risk === "object" && risk !== null
+                                  ? Object.entries(risk as Record<string, unknown>)
+                                      .filter(([, v]) => !isEmptyValue(v))
+                                      .map(([k, v]) => (
+                                        <div key={k} className="flex justify-between items-start text-sm">
+                                          <span className="text-slate-400 min-w-[140px]">{k.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}</span>
+                                          <span className="text-slate-200 text-right">{renderValue(v)}</span>
+                                        </div>
+                                      ))
+                                  : <span className="text-sm text-slate-300">{renderValue(risk)}</span>}
                               </div>
                             ))}
                           </div>
                         );
                       }
-                      return <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{String(parsed)}</p>;
+                      if (parsed && typeof parsed === "object") {
+                        return (
+                          <div className="space-y-2">
+                            {Object.entries(parsed as Record<string, unknown>)
+                              .filter(([, v]) => !isEmptyValue(v))
+                              .map(([key, value]) => (
+                                <div key={key} className="flex justify-between items-start rounded-lg bg-slate-800/50 px-3 py-2">
+                                  <span className="text-sm font-medium text-slate-400">
+                                    {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                                  </span>
+                                  <span className="text-sm text-white">{renderValue(value)}</span>
+                                </div>
+                              ))}
+                          </div>
+                        );
+                      }
+                      return <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap">{renderValue(parsed)}</p>;
                     })()}
                   </CardContent>
                 </Card>
@@ -674,29 +696,47 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                 </Card>
               )}
 
-              {analise.campos_customizados && Object.entries(analise.campos_customizados).filter(([, v]) => !isEmptyValue(v)).length > 0 && (
-                <Card className="border-slate-800 bg-slate-900/50 md:col-span-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
-                      <FileText className="h-4 w-4 text-cyan-400" /> Dados Específicos
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid gap-2 md:grid-cols-2">
-                      {Object.entries(analise.campos_customizados).filter(([, v]) => !isEmptyValue(v)).map(([key, value]) => (
-                        <div key={key} className="flex justify-between items-start rounded-lg bg-slate-800/50 px-3 py-2">
-                          <span className="text-sm font-medium text-slate-400">
-                            {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
-                          </span>
-                          <span className="text-sm text-white text-right max-w-[60%]">
-                            {renderValue(value)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+              {analise.campos_customizados && (() => {
+                // Flatten: skip item_schema (template), flatten nested campos_customizados
+                const raw = analise.campos_customizados as Record<string, unknown>;
+                const flat: Record<string, unknown> = {};
+                for (const [k, v] of Object.entries(raw)) {
+                  if (k === "item_schema") continue; // Skip LLM template
+                  if (k === "campos_customizados" && typeof v === "object" && v !== null && !Array.isArray(v)) {
+                    // Flatten nested campos_customizados
+                    for (const [ck, cv] of Object.entries(v as Record<string, unknown>)) {
+                      if (!isEmptyValue(cv)) flat[ck] = cv;
+                    }
+                  } else if (!isEmptyValue(v)) {
+                    flat[k] = v;
+                  }
+                }
+                const entries = Object.entries(flat);
+                if (entries.length === 0) return null;
+                return (
+                  <Card className="border-slate-800 bg-slate-900/50 md:col-span-2">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
+                        <FileText className="h-4 w-4 text-cyan-400" /> Dados Específicos
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-2 md:grid-cols-2">
+                        {entries.map(([key, value]) => (
+                          <div key={key} className="flex justify-between items-start rounded-lg bg-slate-800/50 px-3 py-2">
+                            <span className="text-sm font-medium text-slate-400">
+                              {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                            </span>
+                            <span className="text-sm text-white text-right max-w-[60%]">
+                              {renderValue(value)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </div>
           ) : (
             <Card className="border-slate-800 bg-slate-900/50">
