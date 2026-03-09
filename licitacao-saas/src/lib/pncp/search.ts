@@ -247,8 +247,9 @@ export async function executarBusca(
                     cnpj_orgao, orgao_nome, objeto_compra, valor_total_estimado,
                     modalidade_contratacao, tipo_participacao, data_publicacao,
                     data_encerramento_proposta, uf, municipio, link_sistema_origem,
-                    passou_pre_triagem, status
-                  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,'NOVA')
+                    passou_pre_triagem, status, slug
+                  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,'NOVA',
+                    LOWER(REGEXP_REPLACE(CONCAT(COALESCE($13,'br'),'-',LEFT(REGEXP_REPLACE(COALESCE($6,'orgao'),'[^a-zA-Z0-9 ]','','g'),40),'-',uuid_generate_v4()::TEXT,'-',TO_CHAR(COALESCE($11::timestamptz,NOW()),'YYYY-MM')),'[^a-z0-9]+','-','g')))
                   ON CONFLICT (tenant_id, numero_controle_pncp) DO UPDATE SET
                     ano_compra = EXCLUDED.ano_compra,
                     sequencial_compra = EXCLUDED.sequencial_compra,
@@ -283,8 +284,9 @@ export async function executarBusca(
                   ]
                 );
                 stats.inseridas++;
-              } catch {
+              } catch (insertErr) {
                 stats.erros_insert++;
+                console.error(`[BUSCA] Insert error for ${lic.numeroControlePNCP}:`, insertErr instanceof Error ? insertErr.message : insertErr);
               }
             }
 
