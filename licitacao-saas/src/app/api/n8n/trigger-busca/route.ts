@@ -57,6 +57,28 @@ export async function POST() {
       });
     }
 
+    // Auto-cleanup: remove NOVA expiradas há >7 dias sem análise (nunca terão valor)
+    if (result.success) {
+      try {
+        const cleaned = await query(
+          `DELETE FROM licitacoes
+           WHERE id IN (
+             SELECT l.id FROM licitacoes l
+             LEFT JOIN analises a ON a.licitacao_id = l.id
+             WHERE l.tenant_id = $1
+               AND l.review_phase = 'NOVA'
+               AND a.id IS NULL
+               AND l.data_encerramento_proposta < NOW() - INTERVAL '7 days'
+           )`,
+          [tenantId]
+        );
+        console.log(`[BUSCA] Auto-cleanup: licitações NOVA expiradas removidas`);
+      } catch (cleanupErr) {
+        // Limpeza não é crítica - não aborta o resultado
+        console.error("[BUSCA] Auto-cleanup falhou:", cleanupErr);
+      }
+    }
+
     return NextResponse.json({ success: result.success, execution_id: execution?.id, stats: result.stats, error: result.error });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

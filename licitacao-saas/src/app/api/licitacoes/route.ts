@@ -85,6 +85,17 @@ export async function GET(req: NextRequest) {
     whereClause += ` AND l.review_phase NOT IN (${excluded.join(",")})`;
   }
 
+  // pipeline=true: exclui NOVA expiradas (nunca analisadas, sem valor de pipeline)
+  // e exclui REJEITADA (buscada separadamente on-demand)
+  const pipelineMode = searchParams.get("pipeline") === "true";
+  if (pipelineMode) {
+    whereClause += ` AND NOT (
+      l.review_phase = 'NOVA'
+      AND l.data_encerramento_proposta < NOW()
+    )`;
+    whereClause += ` AND l.review_phase != 'REJEITADA'`;
+  }
+
   const sortBy = searchParams.get("sort_by") || "deadline";
   const orderBy = sortBy === "publicacao"
     ? "ORDER BY l.data_publicacao DESC NULLS LAST"

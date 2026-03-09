@@ -47,6 +47,7 @@ export default function PipelinePage() {
   const [filterPriority, setFilterPriority] = useState<string>("");
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [showRejected, setShowRejected] = useState(false);
+  const [rejectedItems, setRejectedItems] = useState<PipelineItem[]>([]);
   const [movingId, setMovingId] = useState<string | null>(null);
   const [noteModal, setNoteModal] = useState<{ id: string; toPhase: string } | null>(null);
   const [noteText, setNoteText] = useState("");
@@ -70,13 +71,20 @@ export default function PipelinePage() {
     // Silent update if we already have items to avoid flickering
     if (items.length === 0) setLoading(true);
     try {
-      const res = await fetch("/api/licitacoes?limit=5000");
+      // pipeline=true: exclui NOVA expiradas + REJEITADA (buscadas separadamente)
+      const res = await fetch("/api/licitacoes?limit=2000&pipeline=true");
       const data = await res.json();
       setItems(data.data || []);
     } finally {
       setLoading(false);
     }
   }, [items.length]);
+
+  const fetchRejected = useCallback(async () => {
+    const res = await fetch("/api/licitacoes?limit=2000&phase=REJEITADA");
+    const data = await res.json();
+    setRejectedItems(data.data || []);
+  }, []);
 
   useEffect(() => {
     fetchData();
@@ -99,11 +107,6 @@ export default function PipelinePage() {
     return result;
   }, [items, searchQuery, filterPriority]);
 
-  const rejectedItems = useMemo(
-    () => filteredItems.filter((i) => i.review_phase === "REJEITADA" || i.tipo_oportunidade === "PRE_TRIAGEM_REJEITAR"),
-    [filteredItems]
-  );
-
   const stats = useMemo(() => {
     const active = items.filter((i) => i.review_phase !== "REJEITADA" && i.review_phase !== "CONCLUIDA" && i.tipo_oportunidade !== "PRE_TRIAGEM_REJEITAR");
     const totalValue = active.reduce((s, i) => s + (Number(i.valor_total_estimado) || 0), 0);
@@ -119,7 +122,7 @@ export default function PipelinePage() {
       urgent: urgent.length,
       rejected: rejectedItems.length,
     };
-  }, [items, rejectedItems]);
+  }, [items, rejectedItems.length]);
 
   async function moveToPhase(id: string, toPhase: string, note?: string) {
     setMovingId(id);
@@ -330,7 +333,11 @@ export default function PipelinePage() {
           size="sm"
           variant="ghost"
           className={`h-7 text-xs ${showRejected ? "text-red-400" : "text-slate-500"}`}
-          onClick={() => setShowRejected(!showRejected)}
+          onClick={() => {
+            const next = !showRejected;
+            setShowRejected(next);
+            if (next && rejectedItems.length === 0) fetchRejected();
+          }}
         >
           <Ban className="mr-1 h-3 w-3" />
           Rejeitadas ({stats.rejected})
