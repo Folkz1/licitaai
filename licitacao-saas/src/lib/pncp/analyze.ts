@@ -94,14 +94,22 @@ async function callLLM(
   temperature = 0.1,
   maxTokens = 4096
 ): Promise<{ content: string; usage: { input_tokens: number; output_tokens: number } }> {
-  const res = await fetch(OPENROUTER_URL, {
+  // Use OpenAI directly when key is available and model is openai/* (cheaper, no OpenRouter markup)
+  const useDirectOpenAI = !!OPENAI_KEY && model.startsWith("openai/");
+  const url = useDirectOpenAI
+    ? "https://api.openai.com/v1/chat/completions"
+    : OPENROUTER_URL;
+  const key = useDirectOpenAI ? OPENAI_KEY : OPENROUTER_KEY;
+  const actualModel = useDirectOpenAI ? model.replace("openai/", "") : model;
+
+  const res = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${OPENROUTER_KEY}`,
+      Authorization: `Bearer ${key}`,
     },
     body: JSON.stringify({
-      model,
+      model: actualModel,
       messages,
       temperature,
       max_tokens: maxTokens,
@@ -112,7 +120,8 @@ async function callLLM(
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`OpenRouter ${res.status}: ${text}`);
+    const provider = useDirectOpenAI ? "OpenAI" : "OpenRouter";
+    throw new Error(`${provider} ${res.status}: ${text}`);
   }
 
   const data = await res.json();

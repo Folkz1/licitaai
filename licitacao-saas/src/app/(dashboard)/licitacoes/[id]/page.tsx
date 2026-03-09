@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use, useCallback } from "react";
+import React, { useEffect, useState, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -93,6 +93,13 @@ interface ReviewAction {
   user_name: string;
 }
 
+interface PncpDocument {
+  sequencial: number;
+  titulo: string;
+  tipo: string;
+  url: string;
+}
+
 const PHASES = ["NOVA", "PRE_TRIAGEM", "ANALISE", "DECISAO", "PREPARACAO", "PARTICIPANDO", "CONCLUIDA"];
 
 function formatCurrency(v: number) {
@@ -108,6 +115,35 @@ function formatDate(d: string) {
 function parseJson(str: string) {
   if (!str) return null;
   try { return JSON.parse(str); } catch { return str; }
+}
+
+function renderValue(value: unknown): React.ReactNode {
+  if (value === null || value === undefined) return "-";
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
+  if (typeof value === "number" || typeof value === "string") return String(value);
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "-";
+    if (typeof value[0] === "object") {
+      return (
+        <div className="space-y-1">
+          {value.map((item, i) => (
+            <div key={i} className="text-xs text-slate-300">{typeof item === "object" ? JSON.stringify(item, null, 0) : String(item)}</div>
+          ))}
+        </div>
+      );
+    }
+    return value.join(", ");
+  }
+  if (typeof value === "object") {
+    return (
+      <div className="space-y-1">
+        {Object.entries(value as Record<string, unknown>).map(([k, v]) => (
+          <div key={k} className="text-xs"><span className="text-slate-500">{k}:</span> {String(v ?? "-")}</div>
+        ))}
+      </div>
+    );
+  }
+  return String(value);
 }
 
 function parsePncpNcp(ncp: string) {
@@ -154,6 +190,8 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
   const [analise, setAnalise] = useState<Analise | null>(null);
   const [itens, setItens] = useState<Item[]>([]);
   const [history, setHistory] = useState<ReviewAction[]>([]);
+  const [documents, setDocuments] = useState<PncpDocument[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState<string | null>(null);
@@ -174,8 +212,21 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
     setHistory(data);
   }, [id]);
 
+  const fetchDocuments = useCallback(async () => {
+    setDocsLoading(true);
+    try {
+      const res = await fetch(`/api/licitacoes/${id}/documents`);
+      const data = await res.json();
+      setDocuments(data.documents || []);
+    } catch {
+      setDocuments([]);
+    } finally {
+      setDocsLoading(false);
+    }
+  }, [id]);
+
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { fetchDetail(); fetchHistory(); }, [id, fetchDetail, fetchHistory]);
+  useEffect(() => { fetchDetail(); fetchHistory(); fetchDocuments(); }, [id, fetchDetail, fetchHistory, fetchDocuments]);
 
   async function handleAction(action: string, toPhase?: string) {
     await fetch(`/api/licitacoes/${id}/status`, {
@@ -346,6 +397,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
         <TabsList className="bg-slate-800">
           <TabsTrigger value="analise">Analise IA</TabsTrigger>
           <TabsTrigger value="itens">Itens ({itens.length})</TabsTrigger>
+          <TabsTrigger value="documentos">Documentos</TabsTrigger>
           <TabsTrigger value="historico">Historico</TabsTrigger>
         </TabsList>
 
@@ -428,7 +480,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                                 <span className="text-sm font-medium text-slate-400">
                                   {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
-                                <span className="text-sm text-white">{String(value)}</span>
+                                <span className="text-sm text-white">{renderValue(value)}</span>
                               </div>
                             ))}
                           </div>
@@ -463,7 +515,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                                 <span className="text-sm font-medium text-slate-400">
                                   {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
-                                <span className="text-sm text-white">{String(value)}</span>
+                                <span className="text-sm text-white">{renderValue(value)}</span>
                               </div>
                             ))}
                           </div>
@@ -500,7 +552,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                                 <span className="text-sm font-medium text-slate-400">
                                   {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
-                                <span className="text-sm text-white">{String(value)}</span>
+                                <span className="text-sm text-white">{renderValue(value)}</span>
                               </div>
                             ))}
                           </div>
@@ -528,7 +580,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                                 <span className="text-sm font-medium text-slate-400">
                                   {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
-                                <span className="text-sm text-white">{String(value)}</span>
+                                <span className="text-sm text-white">{renderValue(value)}</span>
                               </div>
                             ))}
                           </div>
@@ -556,7 +608,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                                 <span className="text-sm font-medium text-slate-400">
                                   {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
-                                <span className="text-sm text-white">{String(value)}</span>
+                                <span className="text-sm text-white">{renderValue(value)}</span>
                               </div>
                             ))}
                           </div>
@@ -584,7 +636,7 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                                 <span className="text-sm font-medium text-slate-400">
                                   {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                                 </span>
-                                <span className="text-sm text-white">{String(value)}</span>
+                                <span className="text-sm text-white">{renderValue(value)}</span>
                               </div>
                             ))}
                           </div>
@@ -606,12 +658,12 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                   <CardContent>
                     <div className="grid gap-2 md:grid-cols-2">
                       {Object.entries(analise.campos_customizados).map(([key, value]) => (
-                        <div key={key} className="flex justify-between items-center rounded-lg bg-slate-800/50 px-3 py-2">
+                        <div key={key} className="flex justify-between items-start rounded-lg bg-slate-800/50 px-3 py-2">
                           <span className="text-sm font-medium text-slate-400">
                             {key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                           </span>
-                          <span className="text-sm text-white">
-                            {Array.isArray(value) ? (value as string[]).join(", ") : String(value ?? "-")}
+                          <span className="text-sm text-white text-right max-w-[60%]">
+                            {renderValue(value)}
                           </span>
                         </div>
                       ))}
@@ -679,6 +731,51 @@ export default function LicitacaoDetailPage({ params }: { params: Promise<{ id: 
                 </TableBody>
               </Table>
             )}
+          </Card>
+        </TabsContent>
+
+        {/* Documents Tab */}
+        <TabsContent value="documentos" className="space-y-4">
+          <Card className="border-slate-800 bg-slate-900/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-sm text-slate-300">
+                <FileText className="h-4 w-4 text-amber-400" /> Documentos do Edital
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {docsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin text-indigo-500" />
+                </div>
+              ) : documents.length === 0 ? (
+                <p className="text-center text-sm text-slate-400 py-6">
+                  Nenhum documento encontrado no PNCP.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((doc) => (
+                    <div
+                      key={doc.sequencial}
+                      className="flex items-center justify-between rounded-lg bg-slate-800/50 px-4 py-3"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-white truncate">{doc.titulo}</p>
+                        <p className="text-xs text-slate-400">{doc.tipo}</p>
+                      </div>
+                      <a
+                        href={doc.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-4 flex items-center gap-1.5 rounded-lg bg-amber-600/10 border border-amber-500/30 px-3 py-1.5 text-sm text-amber-400 hover:bg-amber-600/20 transition-colors shrink-0"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Baixar
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
           </Card>
         </TabsContent>
 
