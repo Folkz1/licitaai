@@ -679,6 +679,222 @@ function buildFallbackContext(editalText: string): string {
   return `[RAG] Nenhum trecho recuperado. Texto bruto do edital:\n\n${editalText.slice(0, 30000)}`;
 }
 
+// --- Smart Context Extraction (no embeddings, no API cost) ---
+// Replaces both full-text and vector RAG for cost efficiency.
+// Strategy: chunk text → score each chunk by section markers + tenant keywords → pick top chunks within token budget.
+
+const SECTION_PATTERNS: { name: string; label: string; patterns: RegExp[]; priority: number }[] = [
+  {
+    name: "itens",
+    label: "ITENS / LOTES",
+    patterns: [
+      /\b(item|itens|lote|lotes|tabela|planilha|descri[çc][ãa]o)\b/i,
+      /\b(unidade|quantidade|qtd|qtde|valor\s*unit[áa]rio|valor\s*total)\b/i,
+      /\b(catmat|catser|codigo|c[óo]digo\s*SIPAC)\b/i,
+    ],
+    priority: 10, // most important — items drive the analysis
+  },
+  {
+    name: "datas",
+    label: "DATAS / SESSÃO",
+    patterns: [
+      /\b(data|hor[áa]rio|sess[ãa]o|abertura|disputa|encerramento)\b/i,
+      /\b(preg[ãa]o\s*eletr[ôo]nico|preg[ãa]o\s*presencial)\b/i,
+      /\d{2}[\/\.]\d{2}[\/\.]\d{4}\s*[àa]s?\s*\d{1,2}[h:]\d{0,2}/i, // date+time pattern
+    ],
+    priority: 7,
+  },
+  {
+    name: "prazos",
+    label: "PRAZOS / VIGÊNCIA",
+    patterns: [
+      /\b(prazo|vig[êe]ncia|entrega|pagamento|validade|execu[çc][ãa]o)\b/i,
+      /\b(\d+\s*(dias?|meses|mes|anos?)\s*(corridos|[úu]teis)?)\b/i,
+    ],
+    priority: 6,
+  },
+  {
+    name: "amostra",
+    label: "AMOSTRA / DEMONSTRAÇÃO",
+    patterns: [
+      /\b(amostra|demonstra[çc][ãa]o|prot[óo]tipo|cat[áa]logo|prova\s*de\s*conceito)\b/i,
+    ],
+    priority: 5,
+  },
+  {
+    name: "me_epp",
+    label: "ME/EPP",
+    patterns: [
+      /\b(me\s*\/?\s*epp|microempresa|pequeno\s*porte|lc\s*123|exclusiv)/i,
+      /\b(cota\s*(reservada|principal)|margem\s*de\s*prefer[êe]ncia)\b/i,
+    ],
+    priority: 5,
+  },
+  {
+    name: "habilitacao",
+    label: "HABILITAÇÃO / DOCUMENTOS",
+    patterns: [
+      /\b(habilita[çc][ãa]o|documenta[çc][ãa]o|atestado|certid[ãa]o|crc|sicaf)\b/i,
+      /\b(capacidade\s*t[ée]cnica|qualifica[çc][ãa]o\s*t[ée]cnica)\b/i,
+    ],
+    priority: 4,
+  },
+  {
+    name: "garantia",
+    label: "GARANTIAS",
+    patterns: [
+      /\b(garantia|cau[çc][ãa]o|seguro[- ]?garantia|fian[çc]a)\b/i,
+    ],
+    priority: 3,
+  },
+  {
+    name: "penalidades",
+    label: "PENALIDADES / SANÇÕES",
+    patterns: [
+      /\b(penalidade|san[çc][ãa]o|multa|rescis[ãa]o|inadimpl[êe]ncia)\b/i,
+    ],
+    priority: 2,
+  },
+];
+
+interface ScoredChunk {
+  text: string;
+  index: number;
+  score: number;
+  sections: string[];
+  keywordHits: number;
+  hasPricePattern: boolean;
+}
+
+function buildSmartContext(
+  editalText: string,
+  keywords: string[] = [],
+  tokenBudget = 80000 // ~20K tokens at ~4 chars/token
+): string {
+  if (!editalText || editalText.length < 100) return "";
+
+  // 1. Chunk the document (reuse existing paragraph-aware chunker, larger chunks for context)
+  const SMART_CHUNK_SIZE = 3000;
+  const chunks = chunkText(editalText, SMART_CHUNK_SIZE, 200);
+  if (chunks.length === 0) return buildFallbackContext(editalText);
+
+  // 2. Normalize keywords for matching
+  const lowerKeywords = keywords.map(k => normalize(k)).filter(k => k.length > 2);
+
+  // 3. Score each chunk
+  const scored: ScoredChunk[] = chunks.map((text, index) => {
+    const lower = text.toLowerCase();
+    const normalized = normalize(text);
+    let score = 0;
+    const sections: string[] = [];
+
+    // Score by section patterns
+    for (const section of SECTION_PATTERNS) {
+      let sectionMatches = 0;
+      for (const pattern of section.patterns) {
+        if (pattern.test(text)) sectionMatches++;
+      }
+      if (sectionMatches > 0) {
+        score += section.priority * sectionMatches;
+        sections.push(section.name);
+      }
+    }
+
+    // Score by tenant keyword matches (most important for relevance)
+    let keywordHits = 0;
+    for (const kw of lowerKeywords) {
+      // Count occurrences (not just boolean) — a chunk with 5 keyword mentions is better than 1
+      const regex = new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      const matches = normalized.match(regex);
+      if (matches) {
+        keywordHits += matches.length;
+        score += matches.length * 8; // high weight for product keywords
+      }
+    }
+
+    // Score by price/quantity patterns (indicators of item tables)
+    const hasPricePattern = /R\$\s*[\d.,]+|\d+[.,]\d{2,3}[.,]\d{2}|\d+[.,]\d{2}\s*(un|pc|cx|rl|rm|kg|mt|lt)/i.test(text);
+    if (hasPricePattern) score += 5;
+
+    // Score by table-like structure (item numbers, sequential patterns)
+    const tablePattern = /^\s*\d{1,4}\s*[\-–|]\s/gm;
+    const tableMatches = text.match(tablePattern);
+    if (tableMatches && tableMatches.length >= 3) score += 6;
+
+    // First 10% of document often has key summary data
+    if (index < chunks.length * 0.1) score += 3;
+
+    return { text, index, score, sections, keywordHits, hasPricePattern };
+  });
+
+  // 4. Sort by score descending, then by original position for tie-breaking
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
+
+  // 5. Select chunks within token budget
+  const selected: ScoredChunk[] = [];
+  let charBudget = tokenBudget;
+
+  for (const chunk of scored) {
+    if (chunk.score <= 0) break; // no point including zero-score chunks
+    if (charBudget <= 0) break;
+    selected.push(chunk);
+    charBudget -= chunk.text.length;
+  }
+
+  // If we selected nothing meaningful, fallback
+  if (selected.length === 0) return buildFallbackContext(editalText);
+
+  // 6. Re-sort selected chunks by original document order (preserves reading flow)
+  selected.sort((a, b) => a.index - b.index);
+
+  // 7. Build structured context grouped by section
+  const sectionGroups = new Map<string, string[]>();
+  const uncategorized: string[] = [];
+
+  for (const chunk of selected) {
+    if (chunk.sections.length > 0) {
+      // Assign to highest-priority section
+      const primary = chunk.sections.sort((a, b) => {
+        const pa = SECTION_PATTERNS.find(s => s.name === a)?.priority || 0;
+        const pb = SECTION_PATTERNS.find(s => s.name === b)?.priority || 0;
+        return pb - pa;
+      })[0];
+      const list = sectionGroups.get(primary) || [];
+      list.push(chunk.text);
+      sectionGroups.set(primary, list);
+    } else if (chunk.keywordHits > 0 || chunk.hasPricePattern) {
+      const list = sectionGroups.get("itens") || [];
+      list.push(chunk.text);
+      sectionGroups.set("itens", list);
+    } else {
+      uncategorized.push(chunk.text);
+    }
+  }
+
+  // 8. Build output with clear section headers
+  let context = `REGRAS: use SOMENTE os trechos abaixo para preencher o JSON. Se não achar, use null/0/[].\n---\n`;
+
+  const sectionOrder = SECTION_PATTERNS.map(s => s.name);
+  for (const name of sectionOrder) {
+    const list = sectionGroups.get(name);
+    if (!list || list.length === 0) continue;
+    const section = SECTION_PATTERNS.find(s => s.name === name);
+    context += `\n## ${section?.label || name.toUpperCase()}\n`;
+    for (const text of list) {
+      context += `${text.trim()}\n---\n`;
+    }
+  }
+
+  if (uncategorized.length > 0) {
+    context += `\n## OUTROS TRECHOS RELEVANTES\n`;
+    for (const text of uncategorized) {
+      context += `${text.trim()}\n---\n`;
+    }
+  }
+
+  return context;
+}
+
 interface FullAnalysisResult {
   data: Record<string, unknown>;
   raw: string;
@@ -807,7 +1023,8 @@ ${ctx.prompt_analise_completa || ""}
 7. Para servicos de saude: liste CADA especialidade medica como um item separado (ex: "Consulta Cardiologia", "Cirurgia Ortopedica")
 8. Para seguranca/portaria: liste cada posto/turno como item separado
 7. Para prioridade, use APENAS: "P1" (alta), "P2" (media), "P3" (baixa), ou "REJEITAR"
-10. Para cada item use EXATAMENTE estes campos: numero (inteiro), descricao, quantidade, unidade, valor_unitario, valor_total, e_produto_relevante (true/false = relevante para o segmento da empresa), tipo_produto (categoria/especialidade), confianca (0-100), evidencia
+10. Para cada item use EXATAMENTE estes campos: numero (inteiro), descricao, quantidade, unidade, valor_unitario, valor_total, e_produto_relevante (OBRIGATORIO: true se o item e fornecido/relevante para a empresa, false caso contrario), tipo_produto (categoria/especialidade), confianca (0-100), evidencia
+11. CRITICO: Se a prioridade e P1 ou P2, os itens que justificam essa prioridade DEVEM ter e_produto_relevante=true e valor_total>0. Use valor_unitario como valor_total se quantidade nao for especificada.
 
 ## FORMATO DE SAIDA JSON
 Responda EXATAMENTE neste formato JSON. Inclua todos os campos, mesmo com null/0/[].
@@ -912,6 +1129,10 @@ function normalizeAnalysis(raw: Record<string, unknown>): {
     if ((!valor_total || valor_total === 0) && quantidade && valor_unitario) {
       valor_total = quantidade * valor_unitario;
     }
+    // For credenciamento/services with no quantity, use valor_unitario as reference value
+    if ((!valor_total || valor_total === 0) && valor_unitario > 0 && (!quantidade || quantidade === 0)) {
+      valor_total = valor_unitario;
+    }
     // Handle multiple field name variations for the boolean classification
     const e_produto_grafico =
       parseBool(item.e_produto_grafico) ??
@@ -941,6 +1162,17 @@ function normalizeAnalysis(raw: Record<string, unknown>): {
     };
   });
 
+  // If prioridade is P1/P2 but NO items are marked as relevant, the LLM likely failed to set the boolean.
+  // In this case, mark all items with confianca >= 0.5 as relevant (they scored high enough to be P1/P2).
+  const hasAnyRelevant = itens.some(i => i.e_produto_grafico);
+  if (!hasAnyRelevant && ["P1", "P2"].includes(prioridade) && itens.length > 0) {
+    for (const item of itens) {
+      if (item.confianca_classificacao >= 0.5 || itens.length <= 5) {
+        item.e_produto_grafico = true;
+      }
+    }
+  }
+
   // Recalculate valor_itens_relevantes from items (N8N does this, not from LLM summary)
   const valorRelevantesCalc = itens
     .filter(i => i.e_produto_grafico)
@@ -960,7 +1192,9 @@ function normalizeAnalysis(raw: Record<string, unknown>): {
     justificativa,
     score_relevancia: score,
     tipo_oportunidade: tipo,
-    valor_itens_relevantes: valorRelevantesCalc || parseNumber(resumo.valor_itens_relevantes),
+    valor_itens_relevantes: valorRelevantesCalc
+      || parseNumber(resumo.valor_itens_relevantes)
+      || (["P1", "P2"].includes(prioridade) ? parseNumber(resumo.valor_total_licitacao) : 0),
     amostra_exigida: parseBool(analise.amostra_exigida),
     amostra_evidencia: analise.amostra_evidencia ? String(analise.amostra_evidencia) : null,
     documentos_necessarios: safeJson(raw.documentos_necessarios),
@@ -1159,13 +1393,8 @@ export async function analyzeOneLicitacao(
     let ragContext = "";
 
     if (editalText && editalText.length > 100) {
-      // Text provided directly (manual paste or pre-extracted)
-      const RAG_THRESHOLD = 500000;
-      if (editalText.length <= RAG_THRESHOLD) {
-        ragContext = `TEXTO COMPLETO DO EDITAL:\n\n${editalText}`;
-      } else {
-        ragContext = await buildRagContext(tenantId, licitacaoId, editalText, ctx.palavras_inclusao);
-      }
+      // Smart context extraction — keyword + section based, no embeddings
+      ragContext = buildSmartContext(editalText, ctx.palavras_inclusao);
 
       // Persist the text in editais table
       await query(
@@ -1193,10 +1422,7 @@ export async function analyzeOneLicitacao(
                tamanho_bytes = EXCLUDED.tamanho_bytes, updated_at = NOW()`,
             [licitacaoId, ocrDocs[0]?.url || "", ocrDocs[0]?.nome || "edital.pdf", ocrText, ocrText.length]
           );
-          const RAG_THRESHOLD = 500000;
-          ragContext = ocrText.length <= RAG_THRESHOLD
-            ? `TEXTO COMPLETO DO EDITAL:\n\n${ocrText}`
-            : await buildRagContext(tenantId, licitacaoId, ocrText, ctx.palavras_inclusao);
+          ragContext = buildSmartContext(ocrText, ctx.palavras_inclusao);
         }
       }
     } else {
@@ -1206,7 +1432,7 @@ export async function analyzeOneLicitacao(
         [licitacaoId]
       );
       if (stored?.conteudo_texto && stored.conteudo_texto.length > 100) {
-        ragContext = `TEXTO COMPLETO DO EDITAL:\n\n${stored.conteudo_texto}`;
+        ragContext = buildSmartContext(stored.conteudo_texto, ctx.palavras_inclusao);
       }
     }
 
@@ -1359,34 +1585,18 @@ export async function executarAnalise(
               [lic.id, ocrDocs[0]?.url || "", ocrDocs[0]?.nome || "edital.pdf", editalText, editalText.length]
             );
 
-            // 4c. Build context for LLM
-            // GPT-4.1-mini has 1M token context → 500K chars (~125K tokens) fits easily
-            // Only use RAG for very large documents where full text exceeds model capacity
-            const RAG_THRESHOLD = 500000; // 500K chars (~125K tokens)
-            if (editalText.length <= RAG_THRESHOLD) {
-              // Send full OCR text — no need for RAG with large context models
-              await onProgress?.(`[${i + 1}/${aprovadas.length}] Texto completo: ${Math.ceil(editalText.length / 1000)}K chars direto para LLM`);
-              ragContext = `TEXTO COMPLETO DO EDITAL:\n\n${editalText}`;
-              await appendDetailedLog(executionId, {
-                time: new Date().toISOString(), level: "info",
-                step: "rag_context", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
-                message: `Texto completo enviado ao LLM (${Math.ceil(editalText.length / 1000)}K chars, sem RAG)`,
-                data: { mode: "full_text", text_length: editalText.length, approx_tokens: Math.ceil(editalText.length / 4) },
-              });
-            } else {
-              // Very large document — use RAG hybrid (semantic + keyword)
-              await onProgress?.(`[${i + 1}/${aprovadas.length}] RAG: ${Math.ceil(editalText.length / 1000)}K chars → chunks + embeddings...`);
-              const ragStart = Date.now();
-              ragContext = await buildRagContext(tenantId, lic.id, editalText, ctx.palavras_inclusao);
-              const ragMs = Date.now() - ragStart;
-              await appendDetailedLog(executionId, {
-                time: new Date().toISOString(), level: "info",
-                step: "rag_context", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
-                duration_ms: ragMs,
-                message: `RAG hybrid: ${Math.ceil(editalText.length / 1000)}K chars → ${Math.ceil(ragContext.length / 1000)}K context em ${(ragMs / 1000).toFixed(1)}s`,
-                data: { mode: "rag_hybrid", text_length: editalText.length, context_length: ragContext.length, chunks_total: chunkText(editalText).length, approx_tokens: Math.ceil(ragContext.length / 4) },
-              });
-            }
+            // 4c. Smart context extraction (keyword + section based, no embeddings)
+            const smartStart = Date.now();
+            ragContext = buildSmartContext(editalText, ctx.palavras_inclusao);
+            const smartMs = Date.now() - smartStart;
+            await onProgress?.(`[${i + 1}/${aprovadas.length}] Smart RAG: ${Math.ceil(editalText.length / 1000)}K → ${Math.ceil(ragContext.length / 1000)}K contexto`);
+            await appendDetailedLog(executionId, {
+              time: new Date().toISOString(), level: "info",
+              step: "rag_context", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
+              duration_ms: smartMs,
+              message: `Smart RAG: ${Math.ceil(editalText.length / 1000)}K → ${Math.ceil(ragContext.length / 1000)}K contexto em ${smartMs}ms`,
+              data: { mode: "smart_keyword", text_length: editalText.length, context_length: ragContext.length, approx_tokens: Math.ceil(ragContext.length / 4) },
+            });
           } else {
             stats.erros_ocr++;
             await onProgress?.(`[${i + 1}/${aprovadas.length}] OCR insuficiente (${editalText.length} chars), analisando sem edital`);
