@@ -125,6 +125,16 @@ async function fetchPncpPage(params: {
   return res.json();
 }
 
+async function appendLog(executionId: string | undefined, log: { time: string; level: string; message: string; step?: string; data?: Record<string, unknown> }) {
+  if (!executionId) return;
+  try {
+    await query(
+      `UPDATE workflow_executions SET logs = COALESCE(logs, '[]'::jsonb) || $2::jsonb WHERE id = $1`,
+      [executionId, JSON.stringify([log])]
+    );
+  } catch { /* never break pipeline */ }
+}
+
 export async function executarBusca(
   tenantId: string,
   executionId?: string,
@@ -180,6 +190,11 @@ export async function executarBusca(
     const dataInicial = formatDate(new Date(now.getTime() - config.dias_retroativos * 86400000));
 
     await onProgress?.(`Buscando PNCP: ${ufs.length} UFs x ${modalidades.length} modalidades, ${config.dias_retroativos} dias`);
+    await appendLog(executionId, {
+      time: new Date().toISOString(), level: "info", step: "busca_config",
+      message: `Config: ${config.nome} | ${ufs.length} UFs x ${modalidades.length} modalidades | ${config.dias_retroativos} dias | Valor min: ${config.valor_minimo}`,
+      data: { config_id: config.id, config_nome: config.nome, ufs, modalidades, dias_retroativos: config.dias_retroativos, valor_minimo: config.valor_minimo, valor_maximo: config.valor_maximo, inclusao_count: inclusao.length, exclusao_count: exclusao.length, inclusao_keywords: inclusao, exclusao_keywords: exclusao },
+    });
 
     // 4. For each UF x modalidade, fetch all pages
     for (const uf of ufs) {
@@ -247,9 +262,8 @@ export async function executarBusca(
                     cnpj_orgao, orgao_nome, objeto_compra, valor_total_estimado,
                     modalidade_contratacao, tipo_participacao, data_publicacao,
                     data_encerramento_proposta, uf, municipio, link_sistema_origem,
-                    passou_pre_triagem, status, slug
-                  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,'NOVA',
-                    LOWER(REGEXP_REPLACE(CONCAT(COALESCE($13,'br'),'-',LEFT(REGEXP_REPLACE(COALESCE($6,'orgao'),'[^a-zA-Z0-9 ]','','g'),40),'-',uuid_generate_v4()::TEXT,'-',TO_CHAR(COALESCE($11::timestamptz,NOW()),'YYYY-MM')),'[^a-z0-9]+','-','g')))
+                    passou_pre_triagem, status
+                  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,'NOVA')
                   ON CONFLICT (tenant_id, numero_controle_pncp) DO UPDATE SET
                     ano_compra = EXCLUDED.ano_compra,
                     sequencial_compra = EXCLUDED.sequencial_compra,
@@ -286,7 +300,13 @@ export async function executarBusca(
                 stats.inseridas++;
               } catch (insertErr) {
                 stats.erros_insert++;
-                console.error(`[BUSCA] Insert error for ${lic.numeroControlePNCP}:`, insertErr instanceof Error ? insertErr.message : insertErr);
+                const errMsg = insertErr instanceof Error ? insertErr.message : String(insertErr);
+                console.error(`[BUSCA] Insert error for ${lic.numeroControlePNCP}:`, errMsg);
+                await appendLog(executionId, {
+                  time: new Date().toISOString(), level: "error", step: "insert_licitacao",
+                  message: `Insert falhou: ${lic.numeroControlePNCP} - ${errMsg.slice(0, 200)}`,
+                  data: { ncp: lic.numeroControlePNCP, objeto: lic.objetoCompra?.slice(0, 100), error: errMsg.slice(0, 300) },
+                });
               }
             }
 
@@ -298,6 +318,11 @@ export async function executarBusca(
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
           await onProgress?.(`Erro UF=${uf || "BR"} mod=${mod}: ${msg}`);
+          await appendLog(executionId, {
+            time: new Date().toISOString(), level: "error", step: "busca_combinacao",
+            message: `Erro UF=${uf || "BR"} mod=${mod}: ${msg.slice(0, 200)}`,
+            data: { uf: uf || "BR", modalidade: mod, error: msg.slice(0, 300) },
+          });
         }
       }
     }

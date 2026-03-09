@@ -1061,6 +1061,37 @@ async function saveRejection(
   );
 }
 
+// --- Detailed Logging Helper ---
+
+interface DetailedLog {
+  time: string;
+  level: "info" | "warn" | "error" | "debug";
+  message: string;
+  licitacao_id?: string;
+  licitacao_ncp?: string;
+  step?: string;
+  model?: string;
+  tokens_in?: number;
+  tokens_out?: number;
+  cost_usd?: number;
+  duration_ms?: number;
+  data?: Record<string, unknown>;
+}
+
+async function appendDetailedLog(executionId: string | undefined, log: DetailedLog) {
+  if (!executionId) return;
+  try {
+    await query(
+      `UPDATE workflow_executions SET
+        logs = COALESCE(logs, '[]'::jsonb) || $2::jsonb
+      WHERE id = $1`,
+      [executionId, JSON.stringify([log])]
+    );
+  } catch {
+    // Never let logging break the pipeline
+  }
+}
+
 // --- Main Entry Point ---
 
 export async function executarAnalise(
@@ -1087,6 +1118,11 @@ export async function executarAnalise(
     }
 
     await onProgress?.(`Contexto carregado: ${ctx.tenant_nome} | ${ctx.palavras_inclusao.length} keywords`);
+    await appendDetailedLog(executionId, {
+      time: new Date().toISOString(), level: "info", step: "tenant_context",
+      message: `Tenant: ${ctx.tenant_nome} | Segmento: ${ctx.segmento} | Inclusao: ${ctx.palavras_inclusao.length} | Exclusao: ${ctx.palavras_exclusao.length}`,
+      data: { tenant_nome: ctx.tenant_nome, segmento: ctx.segmento, palavras_inclusao: ctx.palavras_inclusao, palavras_exclusao: ctx.palavras_exclusao, has_custom_pretriagem: !!ctx.prompt_pre_triagem, has_custom_analise: !!ctx.prompt_analise_completa },
+    });
 
     // 2. Select pending licitações
     const pendentes = await selectPendingLicitacoes(tenantId, maxLicitacoes);
@@ -1105,6 +1141,14 @@ export async function executarAnalise(
       try {
         await onProgress?.(`Pre-triagem: ${lic.objeto_compra.slice(0, 80)}...`);
         const triagem = await runPreTriagem(lic, ctx);
+
+        await appendDetailedLog(executionId, {
+          time: new Date().toISOString(), level: triagem.decisao === "ANALISAR" ? "info" : "warn",
+          step: "pre_triagem", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
+          model: PRE_TRIAGEM_MODEL,
+          message: `${triagem.decisao} (${triagem.confianca}%) - ${triagem.motivo}`,
+          data: { objeto: lic.objeto_compra.slice(0, 120), orgao: lic.orgao_nome, valor: lic.valor_total_estimado, decisao: triagem.decisao, motivo: triagem.motivo, confianca: triagem.confianca },
+        });
 
         if (triagem.decisao === "ANALISAR") {
           aprovadas.push(lic);
@@ -1148,7 +1192,17 @@ export async function executarAnalise(
             tipo: f.tipo,
           }));
 
+          const ocrStart = Date.now();
           const editalText = await callOcrSupremo(ocrDocs);
+          const ocrMs = Date.now() - ocrStart;
+
+          await appendDetailedLog(executionId, {
+            time: new Date().toISOString(), level: editalText.length > 100 ? "info" : "warn",
+            step: "ocr", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
+            duration_ms: ocrMs,
+            message: `OCR: ${files.length} arquivo(s), ${Math.ceil(editalText.length / 1000)}K chars em ${(ocrMs / 1000).toFixed(1)}s`,
+            data: { files_count: files.length, files: files.slice(0, 5).map(f => ({ titulo: f.titulo, tipo: f.tipo })), text_length: editalText.length },
+          });
 
           if (editalText.length > 100) {
             // Store OCR text in editais table (like N8N "Gravar Edital")
@@ -1169,10 +1223,25 @@ export async function executarAnalise(
               // Send full OCR text — no need for RAG with large context models
               await onProgress?.(`[${i + 1}/${aprovadas.length}] Texto completo: ${Math.ceil(editalText.length / 1000)}K chars direto para LLM`);
               ragContext = `TEXTO COMPLETO DO EDITAL:\n\n${editalText}`;
+              await appendDetailedLog(executionId, {
+                time: new Date().toISOString(), level: "info",
+                step: "rag_context", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
+                message: `Texto completo enviado ao LLM (${Math.ceil(editalText.length / 1000)}K chars, sem RAG)`,
+                data: { mode: "full_text", text_length: editalText.length, approx_tokens: Math.ceil(editalText.length / 4) },
+              });
             } else {
               // Very large document — use RAG hybrid (semantic + keyword)
               await onProgress?.(`[${i + 1}/${aprovadas.length}] RAG: ${Math.ceil(editalText.length / 1000)}K chars → chunks + embeddings...`);
+              const ragStart = Date.now();
               ragContext = await buildRagContext(tenantId, lic.id, editalText, ctx.palavras_inclusao);
+              const ragMs = Date.now() - ragStart;
+              await appendDetailedLog(executionId, {
+                time: new Date().toISOString(), level: "info",
+                step: "rag_context", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
+                duration_ms: ragMs,
+                message: `RAG hybrid: ${Math.ceil(editalText.length / 1000)}K chars → ${Math.ceil(ragContext.length / 1000)}K context em ${(ragMs / 1000).toFixed(1)}s`,
+                data: { mode: "rag_hybrid", text_length: editalText.length, context_length: ragContext.length, chunks_total: chunkText(editalText).length, approx_tokens: Math.ceil(ragContext.length / 4) },
+              });
             }
           } else {
             stats.erros_ocr++;
@@ -1189,6 +1258,28 @@ export async function executarAnalise(
 
         // 4e. Normalize
         const normalized = normalizeAnalysis(analysisResult.data);
+        const analysisCost = estimateCost(analysisResult.model, analysisResult.tokens_in, analysisResult.tokens_out);
+
+        await appendDetailedLog(executionId, {
+          time: new Date().toISOString(), level: "info",
+          step: "analysis_result", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
+          model: analysisResult.model,
+          tokens_in: analysisResult.tokens_in,
+          tokens_out: analysisResult.tokens_out,
+          cost_usd: analysisCost,
+          duration_ms: analysisResult.time_ms,
+          message: `${normalized.prioridade} | ${normalized.itens.length} itens (${normalized.itens.filter(it => it.e_produto_grafico).length} relevantes) | R$${normalized.valor_itens_relevantes.toLocaleString("pt-BR")} | ${analysisResult.tokens_in}+${analysisResult.tokens_out} tokens | $${analysisCost.toFixed(4)} | ${(analysisResult.time_ms / 1000).toFixed(1)}s`,
+          data: {
+            prioridade: normalized.prioridade,
+            tipo_oportunidade: normalized.tipo_oportunidade,
+            score: normalized.score_relevancia,
+            total_itens: normalized.itens.length,
+            itens_relevantes: normalized.itens.filter(it => it.e_produto_grafico).length,
+            valor_itens_relevantes: normalized.valor_itens_relevantes,
+            amostra_exigida: normalized.amostra_exigida,
+            justificativa: normalized.justificativa.slice(0, 200),
+          },
+        });
 
         // 4f. Save
         await saveAnalysis(lic.id, executionId, normalized, {
@@ -1209,15 +1300,12 @@ export async function executarAnalise(
         const msg = err instanceof Error ? err.message : "Unknown error";
         const stack = err instanceof Error ? err.stack?.slice(0, 300) : "";
         await onProgress?.(`[${i + 1}/${aprovadas.length}] ERRO: ${msg.slice(0, 100)}`);
-        // Log error details to workflow execution
-        if (executionId) {
-          await query(
-            `UPDATE workflow_executions SET
-              logs = COALESCE(logs, '[]'::jsonb) || $2::jsonb
-            WHERE id = $1`,
-            [executionId, JSON.stringify([{ time: new Date().toISOString(), message: `ERRO analise ${lic.id}: ${msg}\n${stack}`, level: "error" }])]
-          ).catch(() => {});
-        }
+        await appendDetailedLog(executionId, {
+          time: new Date().toISOString(), level: "error",
+          step: "analysis_error", licitacao_id: lic.id, licitacao_ncp: lic.numero_controle_pncp,
+          message: `ERRO: ${msg}`,
+          data: { error: msg, stack: stack || undefined, objeto: lic.objeto_compra.slice(0, 120) },
+        });
       }
     }
 
