@@ -78,6 +78,11 @@ export async function GET(req: NextRequest) {
     whereClause += ` AND a.id IS NULL`;
   }
 
+  const source = searchParams.get("source");
+  if (source === "manual") {
+    whereClause += ` AND l.numero_controle_pncp LIKE 'MANUAL-%'`;
+  }
+
   const excludePhase = searchParams.get("exclude_phase");
   if (excludePhase) {
     const excluded = excludePhase.split(",").map((_, i) => `$${paramCount + 1 + i}`);

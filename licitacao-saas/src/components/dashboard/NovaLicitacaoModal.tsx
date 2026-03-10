@@ -90,21 +90,29 @@ export function NovaLicitacaoModal({ onClose, onSuccess }: NovaLicitacaoModalPro
         body: fd,
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: Record<string, unknown>;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setResult({ error: `Erro no servidor (${res.status}). Tente novamente em alguns segundos.` });
+        setStep("done");
+        return;
+      }
 
       if (!res.ok) {
-        setResult({ error: data.error || "Erro ao analisar" });
+        setResult({ error: (data.error as string) || "Erro ao analisar" });
         setStep("done");
         return;
       }
 
       setResult({
-        id: data.id,
-        prioridade: data.prioridade,
-        review_phase: data.review_phase,
+        id: data.id as string,
+        prioridade: data.prioridade as string,
+        review_phase: data.review_phase as string,
       });
       setStep("done");
-      if (data.id) onSuccess(data.id);
+      if (data.id) onSuccess(data.id as string);
     } catch (err) {
       setResult({ error: err instanceof Error ? err.message : "Erro inesperado" });
       setStep("done");

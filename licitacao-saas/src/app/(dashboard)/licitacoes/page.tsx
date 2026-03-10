@@ -270,7 +270,8 @@ export default function LicitacoesPage() {
       if (filters.priority) params.set("priority", filters.priority);
       if (filters.sortBy) params.set("sort_by", filters.sortBy);
       if (filters.period) params.set("period", filters.period);
-      if (filters.analyzed) params.set("analyzed", filters.analyzed);
+      if (filters.analyzed && filters.analyzed !== "manual") params.set("analyzed", filters.analyzed);
+      if (filters.analyzed === "manual") params.set("source", "manual");
 
       syncUrl(page, filters, pageSize);
 
@@ -402,6 +403,7 @@ export default function LicitacoesPage() {
             { key: "", label: "Todas" },
             { key: "true", label: "Analisadas" },
             { key: "false", label: "Pendentes" },
+            { key: "manual", label: "Manuais" },
           ].map(({ key, label }) => (
             <Button
               key={key}
@@ -409,7 +411,7 @@ export default function LicitacoesPage() {
               size="sm"
               onClick={() => setFilters(f => ({ ...f, analyzed: key }))}
               className={filters.analyzed === key
-                ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                ? (key === "manual" ? "bg-violet-600 hover:bg-violet-500 text-white" : "bg-emerald-600 hover:bg-emerald-500 text-white")
                 : "border-slate-700 text-slate-400 hover:text-white"}
             >
               {label}
