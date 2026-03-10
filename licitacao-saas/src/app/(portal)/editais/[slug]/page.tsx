@@ -5,7 +5,6 @@ import {
   isPortalUfSlug,
   normalizePortalUf,
   PORTAL_PUBLIC_TENANT_ID,
-  PORTAL_UFS,
   UF_NAMES,
   type PortalUf,
 } from "@/lib/portal";
@@ -84,10 +83,6 @@ async function getStateCount(uf: PortalUf) {
   );
 
   return Number(row?.total || "0");
-}
-
-export async function generateStaticParams() {
-  return PORTAL_UFS.map((uf) => ({ slug: uf.toLowerCase() }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
