@@ -7,7 +7,8 @@ import { randomUUID } from "crypto";
 
 export const maxDuration = 300;
 
-const OCR_WEBHOOK = "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/ocr-supremo";
+const OCR_SUPREME_URL = process.env.OCR_SUPREME_URL || "https://ocr-supreme.jz9bd8.easypanel.host";
+const OCR_SUPREME_API_KEY = process.env.OCR_SUPREME_API_KEY || "";
 
 /** Extract text from PDF buffer using pdf-parse */
 async function extractPdfText(buffer: Buffer): Promise<string> {
@@ -102,41 +103,48 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Phase 2: Send remaining files to OCR Supremo (if any)
+      // Phase 2: Send remaining files to OCR Supreme service
       if (ocrFiles.length > 0) {
-        try {
-          const documents = await Promise.all(
-            ocrFiles.map(async (file, idx) => {
-              const arrayBuffer = await file.arrayBuffer();
-              const base64 = Buffer.from(arrayBuffer).toString("base64");
-              const fileName = file.name || `doc_${idx + 1}.pdf`;
-              const mimeType = file.type || "application/pdf";
-              return {
-                url: `data:${mimeType};base64,${base64}`,
-                id: `${randomUUID().slice(0, 8)}_${idx}`,
-                nome: fileName,
-                tipo: idx === 0 && textParts.length === 0 ? "Edital" : "Anexo",
-              };
-            })
-          );
+        const ocrHeaders: Record<string, string> = {};
+        if (OCR_SUPREME_API_KEY) ocrHeaders["X-API-Key"] = OCR_SUPREME_API_KEY;
 
-          const ocrRes = await fetch(OCR_WEBHOOK, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ documents }),
-            signal: AbortSignal.timeout(240000), // 4 min
-          });
+        const ocrResults = await Promise.all(
+          ocrFiles.map(async (file) => {
+            try {
+              const isArchive = /\.(rar|zip|7z|tar|gz)$/i.test(file.name || "");
+              const endpoint = isArchive ? "/process-archive/" : "/process-file/";
+              const fd = new FormData();
+              fd.append("file", file, file.name || "document");
 
-          if (ocrRes.ok) {
-            const ocrData = await ocrRes.json();
-            const ocrText = extractOcrText(ocrData);
-            if (ocrText.trim().length > 10) {
-              textParts.push(ocrText);
+              const ocrRes = await fetch(`${OCR_SUPREME_URL}${endpoint}`, {
+                method: "POST",
+                headers: ocrHeaders,
+                body: fd,
+                signal: AbortSignal.timeout(240000),
+              });
+
+              if (!ocrRes.ok) return "";
+              const ocrData = await ocrRes.json();
+
+              if (isArchive && ocrData.files) {
+                // Archive: concatenate text from all extracted files
+                return (ocrData.files as { extracted_text?: string; filename?: string }[])
+                  .filter((f) => f.extracted_text && f.extracted_text.length > 10)
+                  .map((f) => `--- ${f.filename} ---\n${f.extracted_text}`)
+                  .join("\n\n");
+              }
+              // Single file: extract content from response
+              return ocrData.data?.content || "";
+            } catch {
+              return "";
             }
+          })
+        );
+
+        for (const text of ocrResults) {
+          if (text.trim().length > 10) {
+            textParts.push(text);
           }
-          // If OCR fails but we already have text from PDFs, continue anyway
-        } catch {
-          // OCR failed — continue with whatever text we have
         }
       }
 
@@ -203,20 +211,6 @@ export async function POST(req: NextRequest) {
 }
 
 // --- Helpers ---
-
-function extractOcrText(data: unknown): string {
-  if (typeof data === "string") return data;
-  if (Array.isArray(data)) return data.map(extractOcrText).join("\n");
-  if (data && typeof data === "object") {
-    const obj = data as Record<string, unknown>;
-    if (obj.text && typeof obj.text === "string") return obj.text;
-    if (obj.content && typeof obj.content === "string") return obj.content;
-    if (obj.pages) return extractOcrText(obj.pages);
-    if (obj.results) return extractOcrText(obj.results);
-    return Object.values(obj).map(extractOcrText).join("\n");
-  }
-  return "";
-}
 
 /** Try to extract orgão name from first lines of edital */
 function extractOrgao(text: string): string {
