@@ -141,7 +141,7 @@ async function callGemini(prompt: string): Promise<GeneratedPost> {
 
   let cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
   // Fix control characters in JSON strings (common Gemini issue)
-  cleaned = cleaned.replace(/[\x00-\x1f]/g, (ch) => {
+  cleaned = cleaned.replace(/[\x00-\x1f]/g, (ch: string) => {
     if (ch === "\n") return "\\n";
     if (ch === "\r") return "\\r";
     if (ch === "\t") return "\\t";
