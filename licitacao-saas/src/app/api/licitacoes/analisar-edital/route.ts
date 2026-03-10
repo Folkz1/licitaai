@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { getEffectiveTenantId } from "@/lib/tenant";
-import { query, queryOne } from "@/lib/db";
+import { queryOne } from "@/lib/db";
 import { analyzeOneLicitacao } from "@/lib/pncp/analyze";
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
@@ -8,6 +8,27 @@ import { randomUUID } from "crypto";
 export const maxDuration = 300;
 
 const OCR_WEBHOOK = "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/ocr-supremo";
+
+/** Extract text from PDF buffer using pdf-parse */
+async function extractPdfText(buffer: Buffer): Promise<string> {
+  // Dynamic import to avoid build issues
+  const pdfParse = (await import("pdf-parse")).default;
+  const result = await pdfParse(buffer);
+  return result.text || "";
+}
+
+/** Check if file is a PDF by name or mime type */
+function isPdf(file: File): boolean {
+  const name = file.name?.toLowerCase() || "";
+  return name.endsWith(".pdf") || file.type === "application/pdf";
+}
+
+/** Check if file is a text-based format we can read directly */
+function isTextFile(file: File): boolean {
+  const name = file.name?.toLowerCase() || "";
+  return name.endsWith(".txt") || name.endsWith(".csv") || name.endsWith(".rtf")
+    || file.type.startsWith("text/");
+}
 
 /**
  * POST /api/licitacoes/analisar-edital
@@ -51,45 +72,76 @@ export async function POST(req: NextRequest) {
     if (textField && typeof textField === "string" && textField.length > 50) {
       editalText = textField;
     } else if (validFiles.length > 0) {
-      // Send all files to OCR Supremo
-      try {
-        const documents = await Promise.all(
-          validFiles.map(async (file, idx) => {
+      const textParts: string[] = [];
+      const ocrFiles: File[] = [];
+
+      // Phase 1: Extract text from PDFs and text files locally
+      for (const file of validFiles) {
+        try {
+          if (isPdf(file)) {
             const arrayBuffer = await file.arrayBuffer();
-            const base64 = Buffer.from(arrayBuffer).toString("base64");
-            const fileName = (file as File).name || `doc_${idx + 1}.pdf`;
-            const mimeType = file.type || "application/pdf";
-            return {
-              url: `data:${mimeType};base64,${base64}`,
-              id: `${randomUUID().slice(0, 8)}_${idx}`,
-              nome: fileName,
-              tipo: idx === 0 ? "Edital" : "Anexo",
-            };
-          })
-        );
-
-        const ocrRes = await fetch(OCR_WEBHOOK, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ documents }),
-          signal: AbortSignal.timeout(240000), // 4 min
-        });
-
-        if (ocrRes.ok) {
-          const ocrData = await ocrRes.json();
-          editalText = extractOcrText(ocrData);
-        } else {
-          const errText = await ocrRes.text().catch(() => "OCR error");
-          return NextResponse.json(
-            { error: `OCR falhou (${ocrRes.status}): ${errText.slice(0, 200)}` },
-            { status: 502 }
-          );
+            const text = await extractPdfText(Buffer.from(arrayBuffer));
+            if (text.trim().length > 50) {
+              textParts.push(`--- ${file.name} ---\n${text}`);
+            } else {
+              // Scanned PDF with no text layer — needs OCR
+              ocrFiles.push(file);
+            }
+          } else if (isTextFile(file)) {
+            const text = await file.text();
+            if (text.trim().length > 10) {
+              textParts.push(`--- ${file.name} ---\n${text}`);
+            }
+          } else {
+            // DOC, XLS, RAR, ZIP, etc. — send to OCR Supremo
+            ocrFiles.push(file);
+          }
+        } catch {
+          // If pdf-parse fails, fall back to OCR
+          ocrFiles.push(file);
         }
-      } catch (ocrErr) {
-        return NextResponse.json(
-          { error: `OCR timeout ou erro: ${ocrErr instanceof Error ? ocrErr.message : "desconhecido"}` },
-          { status: 502 }
-        );
+      }
+
+      // Phase 2: Send remaining files to OCR Supremo (if any)
+      if (ocrFiles.length > 0) {
+        try {
+          const documents = await Promise.all(
+            ocrFiles.map(async (file, idx) => {
+              const arrayBuffer = await file.arrayBuffer();
+              const base64 = Buffer.from(arrayBuffer).toString("base64");
+              const fileName = file.name || `doc_${idx + 1}.pdf`;
+              const mimeType = file.type || "application/pdf";
+              return {
+                url: `data:${mimeType};base64,${base64}`,
+                id: `${randomUUID().slice(0, 8)}_${idx}`,
+                nome: fileName,
+                tipo: idx === 0 && textParts.length === 0 ? "Edital" : "Anexo",
+              };
+            })
+          );
+
+          const ocrRes = await fetch(OCR_WEBHOOK, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ documents }),
+            signal: AbortSignal.timeout(240000), // 4 min
+          });
+
+          if (ocrRes.ok) {
+            const ocrData = await ocrRes.json();
+            const ocrText = extractOcrText(ocrData);
+            if (ocrText.trim().length > 10) {
+              textParts.push(ocrText);
+            }
+          }
+          // If OCR fails but we already have text from PDFs, continue anyway
+        } catch {
+          // OCR failed — continue with whatever text we have
+        }
+      }
+
+      if (textParts.length > 0) {
+        editalText = textParts.join("\n\n");
       }
     }
   } else if (contentType.includes("application/json")) {
