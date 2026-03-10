@@ -14,6 +14,7 @@ import {
   Sparkles,
   ChevronRight,
   Key,
+  BarChart2,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -32,6 +33,7 @@ const navItems = [
 ];
 
 const adminItems = [
+  { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/admin/tenants", label: "Tenants", icon: Building2 },
   { href: "/admin/users", label: "Usuarios", icon: Users },
   { href: "/admin/custos", label: "Custos LLM", icon: DollarSign },

@@ -1,5 +1,6 @@
 import { query, queryOne } from "@/lib/db";
 import { formatCurrency } from "@/lib/formatters";
+import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { Metadata } from "next";
 import Link from "next/link";
 import { Search, FileText, ArrowLeft, ArrowRight, SlidersHorizontal, Sparkles, Users } from "lucide-react";
@@ -62,9 +63,9 @@ export default async function EditaisListPage({ searchParams }: Props) {
   }
 
   // Build WHERE clauses
-  const conditions: string[] = ["slug IS NOT NULL"];
-  const params: unknown[] = [];
-  let paramIdx = 0;
+  const conditions: string[] = ["tenant_id = $1", "slug IS NOT NULL"];
+  const params: unknown[] = [PORTAL_PUBLIC_TENANT_ID];
+  let paramIdx = params.length;
 
   if (sp.q) {
     paramIdx++;
@@ -166,7 +167,13 @@ export default async function EditaisListPage({ searchParams }: Props) {
 
   // UFs for filter
   const ufs = await query<{ uf: string; count: string }>(
-    `SELECT uf, COUNT(*)::TEXT as count FROM licitacoes WHERE uf IS NOT NULL GROUP BY uf ORDER BY count DESC LIMIT 27`
+    `SELECT uf, COUNT(*)::TEXT as count
+     FROM licitacoes
+     WHERE tenant_id = $1 AND uf IS NOT NULL
+     GROUP BY uf
+     ORDER BY COUNT(*) DESC
+     LIMIT 27`,
+    [PORTAL_PUBLIC_TENANT_ID]
   );
 
   // Build URL helper

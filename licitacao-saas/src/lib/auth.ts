@@ -43,9 +43,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!valid) return null;
 
         // Update last login
-        await queryOne("UPDATE users SET ultimo_login = NOW() WHERE id = $1", [
-          user.id,
-        ]);
+        await queryOne(
+          "UPDATE users SET ultimo_login = NOW(), login_count = COALESCE(login_count, 0) + 1 WHERE id = $1",
+          [user.id]
+        );
 
         return {
           id: user.id,

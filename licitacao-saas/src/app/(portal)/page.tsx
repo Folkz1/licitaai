@@ -1,5 +1,6 @@
 import { query, queryOne } from "@/lib/db";
 import { formatCurrency } from "@/lib/formatters";
+import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { Metadata } from "next";
 import Link from "next/link";
 import { Search, FileText, MapPin, TrendingUp, ArrowRight, Sparkles } from "lucide-react";
@@ -34,9 +35,11 @@ export default async function PortalHomePage() {
       COUNT(DISTINCT uf)::TEXT as ufs,
       COALESCE(SUM(valor_total_estimado), 0)::TEXT as valor_total,
       COUNT(*) FILTER (WHERE COALESCE(analysis_count, 0) > 0)::TEXT as analisadas,
-      (SELECT COUNT(DISTINCT tenant_id)::TEXT FROM licitacoes WHERE tenant_id IS NOT NULL) as tenants_ativos,
+      (SELECT COUNT(DISTINCT tenant_id)::TEXT FROM subscriptions WHERE status = 'ACTIVE') as tenants_ativos,
       TO_CHAR(MAX(created_at), 'DD/MM HH24:MI') as ultima_atualizacao
-    FROM licitacoes`
+    FROM licitacoes
+    WHERE tenant_id = $1`,
+    [PORTAL_PUBLIC_TENANT_ID]
   );
 
   const recentes = await query<{
@@ -50,18 +53,20 @@ export default async function PortalHomePage() {
   }>(
     `SELECT slug, orgao_nome, objeto_compra, valor_total_estimado, uf, modalidade_contratacao, data_publicacao
      FROM licitacoes
-     WHERE slug IS NOT NULL
+     WHERE tenant_id = $1 AND slug IS NOT NULL
      ORDER BY data_publicacao DESC NULLS LAST
-     LIMIT 12`
+     LIMIT 12`,
+    [PORTAL_PUBLIC_TENANT_ID]
   );
 
   const ufs = await query<{ uf: string; count: string }>(
     `SELECT uf, COUNT(*)::TEXT as count
      FROM licitacoes
-     WHERE uf IS NOT NULL
+     WHERE tenant_id = $1 AND uf IS NOT NULL
      GROUP BY uf
-     ORDER BY count DESC
-     LIMIT 20`
+     ORDER BY COUNT(*) DESC
+     LIMIT 20`,
+    [PORTAL_PUBLIC_TENANT_ID]
   );
 
   const totalNum = parseInt(stats?.total || "0");

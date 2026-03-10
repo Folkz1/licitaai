@@ -1,5 +1,14 @@
 import { query, queryOne } from "@/lib/db";
 import { formatCurrency } from "@/lib/formatters";
+import {
+  APP_URL,
+  isPortalUfSlug,
+  normalizePortalUf,
+  PORTAL_PUBLIC_TENANT_ID,
+  PORTAL_UFS,
+  UF_NAMES,
+  type PortalUf,
+} from "@/lib/portal";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -12,18 +21,28 @@ import {
   Lock,
   ArrowRight,
   Sparkles,
+  Flame,
+  Star,
   Shield,
   Clock,
   Tag,
-  Users,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import LeadCaptureForm from "@/components/portal/LeadCaptureForm";
+import StatePortalPage from "@/components/portal/StatePortalPage";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 interface Props {
   params: Promise<{ slug: string }>;
+  searchParams?: Promise<{
+    cidade?: string;
+    modalidade?: string;
+    valor_min?: string;
+    valor_max?: string;
+    prazo_dias?: string;
+    page?: string;
+  }>;
 }
 
 async function getLicitacao(slug: string) {
@@ -47,14 +66,58 @@ async function getLicitacao(slug: string) {
     `SELECT id, slug, numero_controle_pncp, orgao_nome, objeto_compra, valor_total_estimado,
             modalidade_contratacao, data_publicacao, data_encerramento_proposta,
             uf, municipio, link_sistema_origem, link_edital_pncp,
-            COALESCE(analysis_count, 0) as analysis_count, avg_score
-     FROM licitacoes WHERE slug = $1`,
-    [slug]
+            COALESCE(analysis_count, 0)::INT as analysis_count, avg_score::FLOAT as avg_score
+     FROM licitacoes
+     WHERE tenant_id = $1
+       AND slug = $2`,
+    [PORTAL_PUBLIC_TENANT_ID, slug]
   );
+}
+
+async function getStateCount(uf: PortalUf) {
+  const row = await queryOne<{ total: string }>(
+    `SELECT COUNT(*)::TEXT as total
+     FROM licitacoes
+     WHERE tenant_id = $1
+       AND UPPER(uf) = $2`,
+    [PORTAL_PUBLIC_TENANT_ID, uf]
+  );
+
+  return Number(row?.total || "0");
+}
+
+export async function generateStaticParams() {
+  return PORTAL_UFS.map((uf) => ({ slug: uf.toLowerCase() }));
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
+
+  if (isPortalUfSlug(slug)) {
+    const uf = normalizePortalUf(slug) as PortalUf;
+    const stateName = UF_NAMES[uf];
+    const count = await getStateCount(uf);
+    const title = `Licitações em ${stateName} (${uf}) - ${count} editais abertos | LicitaIA`;
+    const description = `${count} licitações abertas em ${stateName}. Pregão eletrônico, dispensa, concorrência e análise com IA gratuita.`;
+
+    return {
+      title,
+      description,
+      openGraph: {
+        title,
+        description,
+        type: "website",
+        url: `${APP_URL}/editais/${uf.toLowerCase()}`,
+        siteName: "LicitaIA",
+      },
+      twitter: {
+        card: "summary_large_image",
+        title,
+        description,
+      },
+    };
+  }
+
   const lic = await getLicitacao(slug);
 
   if (!lic) {
@@ -67,7 +130,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const title = lic.objeto_compra?.slice(0, 70) || "Licitação";
   const description = `${lic.orgao_nome} | ${lic.municipio || ""}/${lic.uf || ""} | ${valor} | Análise por IA disponível`;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const appUrl = APP_URL;
 
   return {
     title: `${title} | LicitaIA`,
@@ -96,8 +159,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function EditalDetalhe({ params }: Props) {
+export default async function EditalDetalhe({ params, searchParams }: Props) {
   const { slug } = await params;
+
+  if (isPortalUfSlug(slug)) {
+    const uf = normalizePortalUf(slug) as PortalUf;
+    return <StatePortalPage uf={uf} filters={(await searchParams) || {}} />;
+  }
+
   const licitacao = await getLicitacao(slug);
 
   if (!licitacao) notFound();
@@ -109,9 +178,16 @@ export default async function EditalDetalhe({ params }: Props) {
     justificativa: string;
     documentos_necessarios: string;
   }>(
-    `SELECT prioridade, score_relevancia, justificativa, documentos_necessarios
-     FROM analises WHERE licitacao_id = $1`,
-    [licitacao.id]
+    `SELECT a.prioridade,
+            a.score_relevancia::FLOAT as score_relevancia,
+            a.justificativa,
+            a.documentos_necessarios
+     FROM analises a
+     JOIN licitacoes l ON l.id = a.licitacao_id
+     WHERE l.numero_controle_pncp = $1
+     ORDER BY a.score_relevancia DESC NULLS LAST, a.created_at DESC NULLS LAST
+     LIMIT 1`,
+    [licitacao.numero_controle_pncp]
   );
 
   // Itens
@@ -123,15 +199,21 @@ export default async function EditalDetalhe({ params }: Props) {
     valor_unitario: number;
     valor_total: number;
   }>(
-    `SELECT numero_item, descricao, quantidade, unidade, valor_unitario, valor_total
-     FROM itens_licitacao WHERE licitacao_id = $1
-     ORDER BY numero_item LIMIT 10`,
-    [licitacao.id]
+    `SELECT i.numero_item, i.descricao, i.quantidade, i.unidade, i.valor_unitario, i.valor_total
+     FROM itens_licitacao i
+     JOIN licitacoes l ON l.id = i.licitacao_id
+     WHERE l.numero_controle_pncp = $1
+     ORDER BY i.numero_item
+     LIMIT 10`,
+    [licitacao.numero_controle_pncp]
   );
 
   const totalItens = await queryOne<{ count: string }>(
-    `SELECT COUNT(*)::TEXT as count FROM itens_licitacao WHERE licitacao_id = $1`,
-    [licitacao.id]
+    `SELECT COUNT(*)::TEXT as count
+     FROM itens_licitacao i
+     JOIN licitacoes l ON l.id = i.licitacao_id
+     WHERE l.numero_controle_pncp = $1`,
+    [licitacao.numero_controle_pncp]
   );
 
   // Related licitações
@@ -144,10 +226,13 @@ export default async function EditalDetalhe({ params }: Props) {
   }>(
     `SELECT slug, objeto_compra, orgao_nome, valor_total_estimado, uf
      FROM licitacoes
-     WHERE slug IS NOT NULL AND id != $1 AND (uf = $2 OR orgao_nome = $3)
+     WHERE tenant_id = $1
+       AND slug IS NOT NULL
+       AND id != $2
+       AND (uf = $3 OR orgao_nome = $4)
      ORDER BY data_publicacao DESC NULLS LAST
      LIMIT 5`,
-    [licitacao.id, licitacao.uf, licitacao.orgao_nome]
+    [PORTAL_PUBLIC_TENANT_ID, licitacao.id, licitacao.uf, licitacao.orgao_nome]
   );
 
   const prioridadeColors: Record<string, string> = {
@@ -211,16 +296,15 @@ export default async function EditalDetalhe({ params }: Props) {
                   </Badge>
                 )}
                 {licitacao.analysis_count > 0 && (
-                  <Badge className="bg-indigo-500/15 text-indigo-400 border-indigo-500/20">
-                    <Sparkles className="mr-1 h-3 w-3" />
-                    Analisada por IA
-                    {licitacao.avg_score != null && ` (${Number(licitacao.avg_score).toFixed(1)}/10)`}
+                  <Badge className="bg-amber-500/10 text-amber-300 border-amber-500/30">
+                    <Flame className="mr-1 h-3 w-3" />
+                    Analisada por {licitacao.analysis_count} {licitacao.analysis_count === 1 ? "empresa" : "empresas"}
                   </Badge>
                 )}
-                {licitacao.analysis_count > 1 && (
-                  <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20">
-                    <Users className="mr-1 h-3 w-3" />
-                    {licitacao.analysis_count} empresas interessadas
+                {licitacao.avg_score != null && licitacao.avg_score > 7 && (
+                  <Badge className="bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
+                    <Star className="mr-1 h-3 w-3" />
+                    Alta relevância segundo IA
                   </Badge>
                 )}
               </div>

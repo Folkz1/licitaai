@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne } from "@/lib/db";
+import { auth } from "@/lib/auth";
+import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { createHash } from "crypto";
 
 // Simple in-memory rate limiter
@@ -52,9 +54,9 @@ export async function GET(req: NextRequest) {
   const offset = (page - 1) * limit;
 
   // Build query
-  const conditions: string[] = ["slug IS NOT NULL"];
-  const params: unknown[] = [];
-  let paramIdx = 0;
+  const conditions: string[] = ["tenant_id = $1", "slug IS NOT NULL"];
+  const params: unknown[] = [PORTAL_PUBLIC_TENANT_ID];
+  let paramIdx = params.length;
 
   if (q) {
     paramIdx++;
@@ -155,10 +157,12 @@ export async function GET(req: NextRequest) {
 
   // Log search for analytics (fire and forget)
   const ipHash = createHash("sha256").update(ip).digest("hex").slice(0, 16);
+  const session = await auth();
   const filters = { uf, modalidade, valor_min: valorMin, valor_max: valorMax, data_inicio: dataInicio, data_fim: dataFim, tem_analise: temAnalise, prazo_dias: prazoDias, order_by: orderBy };
   query(
-    `INSERT INTO portal_searches (query, filters_json, results_count, ip_hash) VALUES ($1, $2, $3, $4)`,
-    [q || null, JSON.stringify(filters), total, ipHash]
+    `INSERT INTO portal_searches (query, filters_json, results_count, ip_hash, user_id)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [q || null, JSON.stringify(filters), total, ipHash, session?.user.id || null]
   ).catch(() => {});
 
   return NextResponse.json({

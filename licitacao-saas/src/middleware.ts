@@ -20,17 +20,21 @@ export function middleware(req: NextRequest) {
   if (
     pathname === "/" ||
     pathname.startsWith("/editais") ||
+    pathname.startsWith("/precos") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/p/") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/public/") ||
+    pathname.startsWith("/api/track") ||
+    pathname.startsWith("/api/jobs/scrape-pncp") ||
     pathname.startsWith("/api/n8n/callback") ||
     pathname.startsWith("/api/cron/") ||
     pathname.startsWith("/api/onboarding/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
-    pathname === "/sitemap.xml"
+    pathname === "/sitemap.xml" ||
+    pathname === "/robots.txt"
   ) {
     return NextResponse.next();
   }

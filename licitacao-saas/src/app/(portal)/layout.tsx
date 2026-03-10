@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { FileText, Search, LogIn } from "lucide-react";
+import TrackPageView from "@/components/TrackPageView";
 
 export default function PortalLayout({
   children,
@@ -8,6 +9,8 @@ export default function PortalLayout({
 }) {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
+      <TrackPageView />
+
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
@@ -27,6 +30,12 @@ export default function PortalLayout({
             >
               <Search className="h-4 w-4" />
               Editais
+            </Link>
+            <Link
+              href="/precos"
+              className="text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              Preços
             </Link>
           </nav>
 
@@ -65,6 +74,11 @@ export default function PortalLayout({
                 <li>
                   <Link href="/editais" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
                     Buscar Editais
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/precos" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+                    Ver Planos
                   </Link>
                 </li>
                 <li>

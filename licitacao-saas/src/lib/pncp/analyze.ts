@@ -10,6 +10,7 @@
  */
 
 import { query, queryOne } from "@/lib/db";
+import { syncPortalFlywheelMetrics } from "@/lib/portal";
 
 // --- Config ---
 
@@ -1448,6 +1449,7 @@ export async function analyzeOneLicitacao(
       tokens_out: analysisResult.tokens_out,
       time_ms: analysisResult.time_ms,
     });
+    await syncPortalFlywheelMetrics([lic.numero_controle_pncp]);
 
     return {
       success: true,

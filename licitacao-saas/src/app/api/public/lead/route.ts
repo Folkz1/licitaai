@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query } from "@/lib/db";
 import { notifyNewLead } from "@/lib/evolution";
+import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { createHash } from "crypto";
 
 export async function POST(req: NextRequest) {
@@ -40,10 +41,13 @@ export async function POST(req: NextRequest) {
       }>(
         `SELECT a.prioridade, a.score_relevancia, a.justificativa
          FROM analises a
-         JOIN licitacoes l ON l.id = a.licitacao_id
-         WHERE l.slug = $1
+         JOIN licitacoes origem ON origem.id = a.licitacao_id
+         JOIN licitacoes portal
+           ON portal.numero_controle_pncp = origem.numero_controle_pncp
+          AND portal.tenant_id = $2
+         WHERE portal.slug = $1
          LIMIT 1`,
-        [source_slug]
+        [source_slug, PORTAL_PUBLIC_TENANT_ID]
       );
       if (result.length > 0) {
         preview = {
