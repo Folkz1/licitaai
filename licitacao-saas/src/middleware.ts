@@ -20,12 +20,14 @@ export function middleware(req: NextRequest) {
   if (
     pathname === "/" ||
     pathname.startsWith("/editais") ||
+    pathname.startsWith("/blog") ||
     pathname.startsWith("/precos") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/p/") ||
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/api/public/") ||
+    pathname.startsWith("/api/blog") ||
     pathname.startsWith("/api/track") ||
     pathname.startsWith("/api/jobs/scrape-pncp") ||
     pathname.startsWith("/api/n8n/callback") ||
