@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import LeadCaptureForm from "@/components/portal/LeadCaptureForm";
 import StatePortalPage from "@/components/portal/StatePortalPage";
 
+export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
 interface Props {
