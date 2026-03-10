@@ -32,6 +32,8 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/api/jobs/scrape-pncp") ||
     pathname.startsWith("/api/n8n/callback") ||
     pathname.startsWith("/api/cron/") ||
+    pathname.startsWith("/api/webhook/") ||
+    pathname.startsWith("/api/leads/enrich") ||
     pathname.startsWith("/api/onboarding/") ||
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||

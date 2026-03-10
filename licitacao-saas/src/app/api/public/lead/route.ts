@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { query } from "@/lib/db";
+import { query, queryOne } from "@/lib/db";
 import { notifyNewLead } from "@/lib/evolution";
+import { createNurturingSequence } from "@/lib/nurturing";
 import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { createHash } from "crypto";
 
@@ -22,14 +23,22 @@ export async function POST(req: NextRequest) {
     const ipHash = createHash("sha256").update(ip).digest("hex").slice(0, 16);
 
     // Save lead
-    await query(
+    const lead = await queryOne<{ id: string }>(
       `INSERT INTO portal_leads (nome, email, telefone, empresa, interesse, source_url, source_slug, utm_source, utm_medium, utm_campaign, ip_hash)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       RETURNING id`,
       [nome, email, telefone || null, empresa || null, interesse || null, source_url || null, source_slug || null, utm_source || null, utm_medium || null, utm_campaign || null, ipHash]
     );
 
     // Notify Diego via WhatsApp (fire and forget)
     notifyNewLead({ nome, email, telefone, empresa, interesse, source_slug }).catch(() => {});
+
+    // Start nurturing sequence if lead has phone (fire and forget)
+    if (lead?.id && telefone) {
+      createNurturingSequence(lead.id).catch((err) =>
+        console.error("[LEAD] Nurturing error:", err)
+      );
+    }
 
     // Return analysis preview as "reward" if source_slug provided
     let preview = null;
