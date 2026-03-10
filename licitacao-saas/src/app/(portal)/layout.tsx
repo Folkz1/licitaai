@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { FileText, Search, LogIn } from "lucide-react";
 import TrackPageView from "@/components/TrackPageView";
+import { Suspense } from "react";
 
 export default function PortalLayout({
   children,
@@ -9,7 +10,9 @@ export default function PortalLayout({
 }) {
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-      <TrackPageView />
+      <Suspense fallback={null}>
+        <TrackPageView />
+      </Suspense>
 
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl">
@@ -30,6 +33,12 @@ export default function PortalLayout({
             >
               <Search className="h-4 w-4" />
               Editais
+            </Link>
+            <Link
+              href="/blog"
+              className="text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              Blog
             </Link>
             <Link
               href="/precos"

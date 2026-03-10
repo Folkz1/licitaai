@@ -34,6 +34,31 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
   ];
 
+  // Blog
+  staticPages.push({
+    url: `${APP_URL}/blog`,
+    lastModified: new Date(),
+    changeFrequency: "daily",
+    priority: 0.8,
+  });
+
+  try {
+    // Blog posts
+    const blogPosts = await query<{ slug: string; published_at: string }>(
+      `SELECT slug, published_at FROM blog_posts WHERE status = 'published' ORDER BY published_at DESC LIMIT 500`
+    );
+    for (const post of blogPosts) {
+      staticPages.push({
+        url: `${APP_URL}/blog/${post.slug}`,
+        lastModified: new Date(post.published_at),
+        changeFrequency: "monthly",
+        priority: 0.6,
+      });
+    }
+  } catch {
+    // Blog table may not exist yet
+  }
+
   try {
     // Dynamic licitação pages
     const licitacoes = await query<{ slug: string; updated_at: string }>(
