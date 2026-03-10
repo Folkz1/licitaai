@@ -139,7 +139,14 @@ async function callGemini(prompt: string): Promise<GeneratedPost> {
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error("Empty Gemini response");
 
-  const cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+  let cleaned = text.replace(/^```json\s*/i, "").replace(/\s*```$/i, "").trim();
+  // Fix control characters in JSON strings (common Gemini issue)
+  cleaned = cleaned.replace(/[\x00-\x1f]/g, (ch) => {
+    if (ch === "\n") return "\\n";
+    if (ch === "\r") return "\\r";
+    if (ch === "\t") return "\\t";
+    return "";
+  });
   return JSON.parse(cleaned);
 }
 
