@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { LogOut, User, Building2, ChevronDown, Check } from "lucide-react";
+import { NotificationBell } from "./NotificationBell";
 
 interface Tenant {
   id: string;
@@ -126,6 +127,7 @@ export function Header({ user }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        <NotificationBell />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="gap-2 text-slate-300 hover:text-white h-9 px-2">

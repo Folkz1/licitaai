@@ -202,6 +202,21 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Create persistent notification for P1/P2 priorities
+  if (result.prioridade === "P1" || result.prioridade === "P2") {
+    const notifType = result.prioridade === "P1" ? "urgent" : "info";
+    const notifTitle = result.prioridade === "P1"
+      ? "P1 — Licitação de Alta Prioridade!"
+      : "P2 — Nova licitação para análise";
+    const notifMsg = `${orgaoNome} — ${objetoCompra.slice(0, 120)}`;
+    await queryOne(
+      `INSERT INTO notifications (tenant_id, type, title, message, link)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT DO NOTHING`,
+      [tenantId, notifType, notifTitle, notifMsg, `/licitacoes/${licitacaoId}`]
+    ).catch(() => {}); // don't fail the main flow
+  }
+
   return NextResponse.json({
     success: true,
     id: licitacaoId,

@@ -94,6 +94,16 @@ export async function POST(
     return NextResponse.json({ error: result.error }, { status: 500 });
   }
 
+  // Create persistent notification for P1 priorities
+  if (result.prioridade === "P1") {
+    await queryOne(
+      `INSERT INTO notifications (tenant_id, type, title, message, link)
+       VALUES ($1, 'urgent', 'P1 — Licitação de Alta Prioridade!', $2, $3)
+       ON CONFLICT DO NOTHING`,
+      [tenantId, `Licitação ${lic.numero_controle_pncp} requer ação imediata`, `/licitacoes/${licitacaoId}`]
+    ).catch(() => {});
+  }
+
   return NextResponse.json({
     success: true,
     prioridade: result.prioridade,

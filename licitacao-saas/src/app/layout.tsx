@@ -21,7 +21,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased bg-slate-950 text-white`}>
         <SessionProvider>
           {children}
-          <Toaster />
+          <Toaster position="top-right" richColors />
         </SessionProvider>
       </body>
     </html>

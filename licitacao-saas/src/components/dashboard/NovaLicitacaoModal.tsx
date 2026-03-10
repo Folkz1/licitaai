@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -101,21 +102,44 @@ export function NovaLicitacaoModal({ onClose, onSuccess }: NovaLicitacaoModalPro
       }
 
       if (!res.ok) {
-        setResult({ error: (data.error as string) || "Erro ao analisar" });
+        const errorMsg = (data.error as string) || "Erro ao analisar";
+        setResult({ error: errorMsg });
         setStep("done");
+        toast.error("Erro na análise do edital", { description: errorMsg.slice(0, 150) });
         return;
       }
 
+      const prioridade = data.prioridade as string;
       setResult({
         id: data.id as string,
-        prioridade: data.prioridade as string,
+        prioridade,
         review_phase: data.review_phase as string,
       });
       setStep("done");
+
+      // Toast notification based on priority
+      if (prioridade === "P1") {
+        toast.warning("P1 — Alta Prioridade!", {
+          description: "Licitação requer ação imediata. Verifique prazos e requisitos.",
+          duration: 10000,
+        });
+      } else if (prioridade === "REJEITAR") {
+        toast.info("Licitação classificada como Não Relevante", {
+          duration: 5000,
+        });
+      } else {
+        toast.success(`Análise concluída — ${prioridade}`, {
+          description: prioridadeConfig[prioridade]?.label || "Prioridade definida",
+          duration: 5000,
+        });
+      }
+
       if (data.id) onSuccess(data.id as string);
     } catch (err) {
-      setResult({ error: err instanceof Error ? err.message : "Erro inesperado" });
+      const errorMsg = err instanceof Error ? err.message : "Erro inesperado";
+      setResult({ error: errorMsg });
       setStep("done");
+      toast.error("Erro na análise", { description: errorMsg });
     }
   }
 
