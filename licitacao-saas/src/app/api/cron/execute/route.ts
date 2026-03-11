@@ -1,6 +1,7 @@
 import { query, queryOne } from "@/lib/db";
 import { executarAnalise } from "@/lib/pncp/analyze";
 import { executarBusca } from "@/lib/pncp/search";
+import { assertTenantOperationalAccess } from "@/lib/trial";
 import { NextRequest, NextResponse } from "next/server";
 
 // Unified cron: BUSCA + ANALISE run sequentially as a single workflow.
@@ -83,6 +84,8 @@ export async function GET(req: NextRequest) {
     const workflowLabel = hasBusca && hasAnalise ? "busca+analise" : hasBusca ? "busca" : "analise";
 
     try {
+      await assertTenantOperationalAccess(tenantId, hasBusca ? "search" : "analysis");
+
       // Create single execution record for the unified workflow
       const execution = await queryOne<{ id: string }>(
         `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)

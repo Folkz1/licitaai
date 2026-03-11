@@ -1,5 +1,6 @@
 import { query } from "@/lib/db";
 import { APP_URL } from "@/lib/portal";
+import { COMMERCIAL_MESSAGES } from "@/lib/commercial";
 import { Check, ArrowRight } from "lucide-react";
 import { Metadata } from "next";
 import Link from "next/link";
@@ -19,45 +20,45 @@ interface PlanRow {
 
 const FAQ_ITEMS = [
   {
-    question: "O que é o LicitaIA?",
+    question: "O que e o LicitaIA?",
     answer:
-      "É uma plataforma que monitora licitações públicas do PNCP, organiza oportunidades por perfil e aplica IA para priorizar o que merece atenção comercial.",
+      "E uma plataforma que monitora licitacoes publicas do PNCP, organiza oportunidades por perfil e aplica IA para priorizar o que merece atencao comercial.",
   },
   {
-    question: "Como funciona a análise por IA?",
+    question: "Como funciona a analise por IA?",
     answer:
-      "A IA lê o edital, extrai sinais de relevância, riscos, documentos e prazos para reduzir triagem manual e acelerar a decisão da equipe.",
+      "A IA le o edital, extrai sinais de relevancia, riscos, documentos e prazos para reduzir triagem manual e acelerar a decisao da equipe.",
   },
   {
     question: "Posso cancelar quando quiser?",
     answer:
-      "Sim. O cancelamento é simples e a assinatura segue ativa até o fim do ciclo já pago.",
+      "Sim. O cancelamento e simples e a assinatura segue ativa ate o fim do ciclo ja pago.",
   },
   {
-    question: "Preciso de cartão para começar?",
+    question: "Preciso de cartao para comecar?",
     answer:
-      "Não necessariamente. O time comercial pode habilitar a melhor forma de ativação para sua operação.",
+      "Nao necessariamente. O time comercial pode habilitar a melhor forma de ativacao para sua operacao.",
   },
   {
-    question: "Tem teste grátis?",
+    question: "Tem teste gratis?",
     answer:
-      "Sim. O onboarding permite validar aderência antes de expandir o uso dentro do time.",
+      "Sim. O time comercial pode liberar um trial assistido de 7 dias com limite operacional para validar aderencia antes de contratar.",
   },
   {
-    question: "Quantos usuários posso adicionar?",
+    question: "Quantos usuarios posso adicionar?",
     answer:
-      "Depende do plano contratado. Os limites de usuários ficam explícitos na tabela comparativa abaixo.",
+      "Depende do plano contratado. Os limites de usuarios ficam explicitos na tabela comparativa abaixo.",
   },
 ];
 
 export const metadata: Metadata = {
-  title: "Planos e Preços - LicitaIA",
+  title: "Planos e Precos - LicitaIA",
   description:
-    "Compare os planos do LicitaIA para monitorar, buscar e analisar licitações com inteligência artificial.",
+    "Compare os planos do LicitaIA para monitorar, buscar e analisar licitacoes com inteligencia artificial.",
   openGraph: {
-    title: "Planos e Preços - LicitaIA",
+    title: "Planos e Precos - LicitaIA",
     description:
-      "Starter, Pro e Enterprise para equipes que precisam captar licitações com mais velocidade.",
+      "Starter, Pro e Enterprise para equipes que precisam captar licitacoes com mais velocidade.",
     type: "website",
     url: `${APP_URL}/precos`,
   },
@@ -85,6 +86,8 @@ export default async function PrecosPage() {
       max_searches_per_day,
       features
     FROM plans
+    WHERE is_active = true
+      AND name <> 'trial_7d'
     ORDER BY price_monthly_cents ASC`
   );
 
@@ -93,7 +96,7 @@ export default async function PrecosPage() {
     "@type": "Product",
     name: "LicitaIA",
     description:
-      "SaaS para monitoramento e análise de licitações públicas com inteligência artificial.",
+      "SaaS para monitoramento e analise de licitacoes publicas com inteligencia artificial.",
     offers: plans.map((plan) => ({
       "@type": "Offer",
       name: plan.display_name,
@@ -106,13 +109,13 @@ export default async function PrecosPage() {
 
   const comparisonRows = [
     {
-      label: "Licitações por mês",
+      label: "Licitacoes por mes",
       values: plans.map((plan) =>
         formatLimit(plan.max_licitacoes_per_month, "Ilimitado")
       ),
     },
     {
-      label: "Usuários",
+      label: "Usuarios",
       values: plans.map((plan) => plan.max_users.toLocaleString("pt-BR")),
     },
     {
@@ -122,17 +125,17 @@ export default async function PrecosPage() {
       ),
     },
     {
-      label: "Análise por IA",
-      values: plans.map(() => "Incluída"),
+      label: "Analise por IA",
+      values: plans.map(() => "Incluida"),
     },
     {
       label: "Pipeline e kanban",
-      values: plans.map(() => "Incluído"),
+      values: plans.map(() => "Incluido"),
     },
     {
-      label: "Suporte prioritário",
+      label: "Suporte prioritario",
       values: plans.map((plan) =>
-        plan.name === "enterprise" ? "Incluído" : "Sob demanda"
+        plan.name === "enterprise" ? "Incluido" : "Sob demanda"
       ),
     },
   ];
@@ -153,25 +156,27 @@ export default async function PrecosPage() {
                 Planos LicitaIA
               </p>
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Escolha o plano para captar licitações com ritmo diário.
+                Escolha o plano para captar licitacoes com ritmo diario.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
                 Starter, Pro e Enterprise para equipes que precisam buscar, filtrar,
                 analisar e transformar oportunidades do PNCP em pipeline comercial.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link
-                  href="/onboarding"
-                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-400"
+                <a
+                  href={COMMERCIAL_MESSAGES.pricing}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
                 >
-                  Começar grátis
+                  Falar no WhatsApp
                   <ArrowRight className="h-4 w-4" />
-                </Link>
+                </a>
                 <Link
                   href="/editais"
                   className="inline-flex items-center rounded-xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
                 >
-                  Ver portal público
+                  Ver portal publico
                 </Link>
               </div>
             </div>
@@ -200,7 +205,7 @@ export default async function PrecosPage() {
                       <h2 className="mt-3 text-3xl font-semibold">
                         {formatPrice(plan.price_monthly_cents)}
                         <span className="ml-2 text-base font-normal text-slate-400">
-                          /mês
+                          /mes
                         </span>
                       </h2>
                     </div>
@@ -212,22 +217,24 @@ export default async function PrecosPage() {
                   </div>
 
                   <div className="mt-8 space-y-4 text-sm text-slate-300">
-                    <Feature text={`${formatLimit(plan.max_licitacoes_per_month, "Ilimitadas")} licitações por mês`} />
-                    <Feature text={`${plan.max_users.toLocaleString("pt-BR")} usuários`} />
+                    <Feature text={`${formatLimit(plan.max_licitacoes_per_month, "Ilimitadas")} licitacoes por mes`} />
+                    <Feature text={`${plan.max_users.toLocaleString("pt-BR")} usuarios`} />
                     <Feature text={`${formatLimit(plan.max_searches_per_day, "Ilimitadas")} buscas por dia`} />
-                    <Feature text="Análises com IA e priorização de oportunidades" />
-                    <Feature text="Portal público e flywheel de inteligência" />
+                    <Feature text="Analises com IA e priorizacao de oportunidades" />
+                    <Feature text="Portal publico e flywheel de inteligencia" />
                   </div>
 
                   <Link
-                    href="/onboarding"
+                    href={COMMERCIAL_MESSAGES.pricing}
                     className={`mt-8 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                       isFeatured
-                        ? "bg-indigo-500 text-white hover:bg-indigo-400"
+                        ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
                         : "border border-slate-700 text-slate-100 hover:border-slate-500"
                     }`}
+                    target="_blank"
+                    rel="noopener noreferrer"
                   >
-                    Começar grátis
+                    Agendar diagnostico
                   </Link>
                 </article>
               );

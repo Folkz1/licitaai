@@ -23,6 +23,8 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/blog") ||
     pathname.startsWith("/precos") ||
     pathname.startsWith("/login") ||
+    pathname.startsWith("/acesso") ||
+    pathname.startsWith("/orquestra") ||
     pathname.startsWith("/onboarding") ||
     pathname.startsWith("/p/") ||
     pathname.startsWith("/api/auth") ||

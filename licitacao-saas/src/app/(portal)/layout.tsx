@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FileText, Search, LogIn } from "lucide-react";
 import TrackPageView from "@/components/TrackPageView";
 import { Suspense } from "react";
+import { COMMERCIAL_MESSAGES } from "@/lib/commercial";
 
 export default function PortalLayout({
   children,
@@ -48,13 +49,15 @@ export default function PortalLayout({
             </Link>
           </nav>
 
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 transition-colors"
+          <a
+            href={COMMERCIAL_MESSAGES.home}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-emerald-400"
           >
             <LogIn className="h-4 w-4" />
-            Acessar Plataforma
-          </Link>
+            Agendar diagnostico
+          </a>
         </div>
       </header>
 

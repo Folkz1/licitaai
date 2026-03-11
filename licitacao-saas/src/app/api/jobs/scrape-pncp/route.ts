@@ -12,12 +12,13 @@ function isAuthorizedWithSecret(req: NextRequest): boolean {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
+  const hasSecretAccess = isAuthorizedWithSecret(req);
+  const session = hasSecretAccess ? null : await auth().catch(() => null);
   const hasSessionAccess = Boolean(
     session?.user && ["SUPER_ADMIN", "ADMIN"].includes(session.user.role)
   );
 
-  if (!hasSessionAccess && !isAuthorizedWithSecret(req)) {
+  if (!hasSessionAccess && !hasSecretAccess) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

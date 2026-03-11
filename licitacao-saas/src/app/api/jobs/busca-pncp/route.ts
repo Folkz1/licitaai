@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { executarBusca } from "@/lib/pncp/search";
 import { executarAnalise } from "@/lib/pncp/analyze";
+import { assertTenantOperationalAccess } from "@/lib/trial";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // 5 min for Vercel
@@ -13,6 +14,7 @@ export async function POST() {
 
   try {
     const tenantId = session.user.tenantId;
+    await assertTenantOperationalAccess(tenantId, "search");
 
     // Check if there's already a running workflow
     const running = await queryOne(
@@ -44,14 +46,29 @@ export async function POST() {
       await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg]);
     }, 15);
 
-    return NextResponse.json({
-      success: buscaResult.success && analiseResult.success,
-      execution_id: execId,
-      busca: buscaResult.stats,
-      analise: analiseResult.stats,
-    });
+    const success = buscaResult.success && analiseResult.success;
+    const error = buscaResult.error || analiseResult.error;
+    const status = !success && error?.includes("expirou")
+      ? 403
+      : !success && error?.includes("trial")
+        ? 429
+        : 200;
+
+    return NextResponse.json(
+      {
+        success,
+        execution_id: execId,
+        busca: buscaResult.stats,
+        analise: analiseResult.stats,
+        error,
+      },
+      { status }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const statusCode = typeof error === "object" && error && "statusCode" in error
+      ? Number((error as { statusCode?: number }).statusCode || 500)
+      : 500;
+    return NextResponse.json({ error: message }, { status: statusCode });
   }
 }

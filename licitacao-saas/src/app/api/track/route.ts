@@ -48,7 +48,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ duplicate: true }, { status: 202 });
     }
 
-    const session = await auth();
+    let session:
+      | {
+          user?: {
+            id?: string;
+            tenantId?: string;
+          };
+        }
+      | null = null;
+
+    try {
+      session = await auth();
+    } catch {
+      session = null;
+    }
     const forwardedFor = req.headers.get("x-forwarded-for");
     const ip = forwardedFor?.split(",")[0]?.trim() || "unknown";
     const ipHash = createHash("sha256").update(ip).digest("hex").slice(0, 16);
@@ -77,8 +90,8 @@ export async function POST(req: NextRequest) {
         body.referrer?.slice(0, 1000) || null,
         userAgent.slice(0, 1000),
         ipHash,
-        session?.user.id || null,
-        session?.user.tenantId || null,
+        session?.user?.id || null,
+        session?.user?.tenantId || null,
         sessionId.slice(0, 200),
         body.utmSource?.slice(0, 120) || null,
         body.utmMedium?.slice(0, 120) || null,

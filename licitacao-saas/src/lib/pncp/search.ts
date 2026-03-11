@@ -10,6 +10,7 @@
  */
 
 import { query, queryOne } from "@/lib/db";
+import { assertTenantOperationalAccess } from "@/lib/trial";
 
 const PNCP_API = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao";
 const PAGE_SIZE = 50;
@@ -152,6 +153,8 @@ export async function executarBusca(
   };
 
   try {
+    await assertTenantOperationalAccess(tenantId, "search");
+
     // 1. Load config
     const config = await queryOne<BuscaConfig>(
       `SELECT id, nome, ufs, modalidades_contratacao,

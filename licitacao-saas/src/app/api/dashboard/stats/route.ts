@@ -1,5 +1,6 @@
 import { getEffectiveTenantId } from "@/lib/tenant";
 import { query } from "@/lib/db";
+import { getTenantTrialStatus } from "@/lib/trial";
 import { NextResponse } from "next/server";
 
 export async function GET() {
@@ -10,7 +11,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [kpis, byUf, byPriority, byWeek, byPhase, urgent, todayActivity] = await Promise.all([
+  const [kpis, byUf, byPriority, byWeek, byPhase, urgent, todayActivity, trial] = await Promise.all([
     // KPIs (join analises to count correctly - n8n may not update licitacoes.status for pre-triagem rejections)
     query(
       `SELECT
@@ -121,6 +122,7 @@ export async function GET() {
        WHERE l.tenant_id = $1`,
       [tenantId]
     ),
+    getTenantTrialStatus(tenantId),
   ]);
 
   return NextResponse.json({
@@ -131,5 +133,6 @@ export async function GET() {
     byPhase,
     urgent,
     todayActivity: todayActivity[0],
+    trial,
   });
 }

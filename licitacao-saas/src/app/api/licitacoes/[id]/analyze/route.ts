@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { getEffectiveTenantId } from "@/lib/tenant";
 import { queryOne } from "@/lib/db";
 import { analyzeOneLicitacao } from "@/lib/pncp/analyze";
+import { assertTenantOperationalAccess } from "@/lib/trial";
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 300;
@@ -38,6 +39,16 @@ export async function POST(
     [licitacaoId, tenantId]
   );
   if (!lic) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+  try {
+    await assertTenantOperationalAccess(tenantId, "analysis");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Trial indisponivel";
+    const statusCode = typeof error === "object" && error && "statusCode" in error
+      ? Number((error as { statusCode?: number }).statusCode || 403)
+      : 403;
+    return NextResponse.json({ error: message }, { status: statusCode });
+  }
 
   // Extract edital text from request
   let editalText: string | undefined;
@@ -91,7 +102,13 @@ export async function POST(
   const result = await analyzeOneLicitacao(licitacaoId, tenantId, editalText);
 
   if (!result.success) {
-    return NextResponse.json({ error: result.error }, { status: 500 });
+    const errorMessage = result.error || "";
+    const status = errorMessage.includes("expirou")
+      ? 403
+      : errorMessage.includes("trial")
+        ? 429
+        : 500;
+    return NextResponse.json({ error: result.error }, { status });
   }
 
   // Create persistent notification for P1 priorities

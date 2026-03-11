@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { query, queryOne } from "@/lib/db";
 import { notifyNewLead } from "@/lib/evolution";
+import { sendLeadNotificationEmail } from "@/lib/email";
 import { createNurturingSequence } from "@/lib/nurturing";
 import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { createHash } from "crypto";
@@ -32,6 +33,15 @@ export async function POST(req: NextRequest) {
 
     // Notify Diego via WhatsApp (fire and forget)
     notifyNewLead({ nome, email, telefone, empresa, interesse, source_slug }).catch(() => {});
+    sendLeadNotificationEmail({
+      nome,
+      email,
+      telefone,
+      empresa,
+      interesse,
+      sourceSlug: source_slug,
+      sourceUrl: source_url,
+    }).catch(() => {});
 
     // Start nurturing sequence if lead has phone (fire and forget)
     if (lead?.id && telefone) {

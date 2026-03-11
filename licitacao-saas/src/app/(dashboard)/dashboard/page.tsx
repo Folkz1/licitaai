@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { WorkflowMonitor } from "@/components/dashboard/WorkflowMonitor";
+import { COMMERCIAL_MESSAGES } from "@/lib/commercial";
 import {
   FileText,
   TrendingUp,
@@ -56,6 +57,15 @@ interface Stats {
     rejeitadas_ia_hoje: string;
     novas_ontem: string;
     analisadas_ontem: string;
+  };
+  trial?: {
+    isTrial: boolean;
+    expired: boolean;
+    daysRemaining: number | null;
+    expiresAt: string | null;
+    dailyAnalysisLimit: number | null;
+    analysesUsedToday: number;
+    analysesRemainingToday: number | null;
   };
 }
 
@@ -138,6 +148,12 @@ export default function DashboardPage() {
   const valorPipeline = parseFloat(kpis.valor_pipeline) || 0;
   const valorTotal = parseFloat(kpis.valor_total) || 0;
   const taxaAnalise = totalNum > 0 ? Math.round((analisadasNum / totalNum) * 100) : 0;
+  const trial = stats.trial;
+  const trialExpiryLabel = trial?.expiresAt
+    ? new Date(trial.expiresAt).toLocaleDateString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+    })
+    : null;
 
   return (
     <div className="space-y-6">
@@ -153,6 +169,54 @@ export default function DashboardPage() {
           </p>
         </div>
       </div>
+
+      {trial?.isTrial && (
+        <div
+          className={`rounded-xl border p-4 ${
+            trial.expired
+              ? "border-red-500/30 bg-red-950/20"
+              : "border-emerald-500/25 bg-emerald-950/20"
+          }`}
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p
+                className={`text-sm font-semibold ${
+                  trial.expired ? "text-red-300" : "text-emerald-300"
+                }`}
+              >
+                {trial.expired
+                  ? "Trial expirado"
+                  : `Trial assistido ativo${trial.daysRemaining !== null ? `: ${trial.daysRemaining} dia(s) restantes` : ""}`}
+              </p>
+              <p className="mt-1 text-sm text-slate-300">
+                {trial.expired
+                  ? `Seu acesso gratuito venceu${trialExpiryLabel ? ` em ${trialExpiryLabel}` : ""}. Fale no WhatsApp para continuar usando o LicitaIA sem perder a configuracao.`
+                  : `Hoje voce ainda pode rodar ${trial.analysesRemainingToday ?? 0} de ${trial.dailyAnalysisLimit ?? 0} analises. Use esse limite para validar os editais mais quentes do seu segmento.`}
+              </p>
+              {!trial.expired && trialExpiryLabel && (
+                <p className="mt-2 text-xs text-slate-400">
+                  Valido ate {trialExpiryLabel}. Ja foram usadas {trial.analysesUsedToday} analises hoje.
+                </p>
+              )}
+            </div>
+
+            <Link
+              href={COMMERCIAL_MESSAGES.pricing}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                trial.expired
+                  ? "bg-red-500 text-white hover:bg-red-400"
+                  : "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+              }`}
+            >
+              Falar no WhatsApp
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Workflow Monitor - Trigger buttons + live progress */}
       <WorkflowMonitor

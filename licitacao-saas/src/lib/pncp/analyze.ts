@@ -11,6 +11,11 @@
 
 import { query, queryOne } from "@/lib/db";
 import { syncPortalFlywheelMetrics } from "@/lib/portal";
+import {
+  assertTenantOperationalAccess,
+  consumeDailyAnalysisQuota,
+  TrialQuotaError,
+} from "@/lib/trial";
 
 // --- Config ---
 
@@ -1372,6 +1377,9 @@ export async function analyzeOneLicitacao(
   editalText?: string // provided text bypasses OCR (for manual entries)
 ): Promise<{ success: boolean; prioridade?: string; review_phase?: string; error?: string }> {
   try {
+    await assertTenantOperationalAccess(tenantId, "analysis");
+    await consumeDailyAnalysisQuota(tenantId, 1);
+
     // 1. Load tenant context
     const ctx = await loadTenantContext(tenantId);
     if (!ctx) return { success: false, error: "Tenant nao encontrado" };
@@ -1483,6 +1491,16 @@ export async function executarAnalise(
   };
 
   try {
+    const quotaStatus = await assertTenantOperationalAccess(tenantId, "analysis");
+
+    if (quotaStatus.enforced && (quotaStatus.analysesRemainingToday || 0) <= 0) {
+      return {
+        success: false,
+        stats,
+        error: `Limite diario do trial atingido (${quotaStatus.dailyAnalysisLimit} analises por dia).`,
+      };
+    }
+
     // 1. Load tenant context
     const ctx = await loadTenantContext(tenantId);
     if (!ctx) {
@@ -1547,6 +1565,7 @@ export async function executarAnalise(
     for (let i = 0; i < aprovadas.length; i++) {
       const lic = aprovadas[i];
       try {
+        await consumeDailyAnalysisQuota(tenantId, 1);
         await onProgress?.(`[${i + 1}/${aprovadas.length}] Analisando: ${lic.objeto_compra.slice(0, 60)}...`);
 
         // 4a. Fetch PNCP files
@@ -1652,6 +1671,19 @@ export async function executarAnalise(
         // Rate limit between analyses
         await new Promise((r) => setTimeout(r, 500));
       } catch (err) {
+        if (err instanceof TrialQuotaError && err.code === "TRIAL_DAILY_LIMIT") {
+          await onProgress?.("Limite diario do trial atingido. Encerrando lote de analise.");
+          await appendDetailedLog(executionId, {
+            time: new Date().toISOString(),
+            level: "warn",
+            step: "trial_limit",
+            licitacao_id: lic.id,
+            licitacao_ncp: lic.numero_controle_pncp,
+            message: err.message,
+          });
+          break;
+        }
+
         stats.erros_analise++;
         const msg = err instanceof Error ? err.message : "Unknown error";
         const stack = err instanceof Error ? err.stack?.slice(0, 300) : "";

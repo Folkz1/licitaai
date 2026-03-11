@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { executarAnalise } from "@/lib/pncp/analyze";
+import { assertTenantOperationalAccess } from "@/lib/trial";
 import { NextResponse } from "next/server";
 
 export const maxDuration = 300; // 5 min
@@ -11,6 +12,7 @@ export async function POST() {
 
   try {
     const tenantId = session.user.tenantId;
+    await assertTenantOperationalAccess(tenantId, "analysis");
 
     // Check if there's already a running analysis for this tenant
     const running = await queryOne(
@@ -57,9 +59,21 @@ export async function POST() {
       });
     }
 
-    return NextResponse.json({ success: result.success, execution_id: execution?.id, stats: result.stats, error: result.error });
+    const status = !result.success && result.error?.includes("expirou")
+      ? 403
+      : !result.success && result.error?.includes("trial")
+        ? 429
+        : 200;
+
+    return NextResponse.json(
+      { success: result.success, execution_id: execution?.id, stats: result.stats, error: result.error },
+      { status }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const statusCode = typeof error === "object" && error && "statusCode" in error
+      ? Number((error as { statusCode?: number }).statusCode || 500)
+      : 500;
+    return NextResponse.json({ error: message }, { status: statusCode });
   }
 }
