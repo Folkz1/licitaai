@@ -75,7 +75,8 @@ async function request(url, jar, init = {}) {
 }
 
 async function ensureSmokeUser(pool) {
-  const email = "codex-prod-onboarding@licitaai.com";
+  const runId = process.env.SMOKE_RUN_ID || crypto.randomBytes(3).toString("hex");
+  const email = process.env.SMOKE_USER_EMAIL || `codex-prod-onboarding-${runId}@licitaai.com`;
   const password = "teste123";
   const passwordHash = await hash(password, 12);
 
@@ -93,8 +94,8 @@ async function ensureSmokeUser(pool) {
     return { email, password, tenantId: existingUser.rows[0].tenant_id };
   }
 
-  const tenantName = "Codex Prod Onboarding";
-  const tenantSlug = `${slugify(tenantName)}-${crypto.randomBytes(3).toString("hex")}`;
+  const tenantName = `Codex Prod Onboarding ${runId}`;
+  const tenantSlug = `${slugify(tenantName)}-${runId}`;
   const tenant = await pool.query(
     "INSERT INTO tenants (nome, slug, ativo, plano) VALUES ($1, $2, true, 'basic') RETURNING id",
     [tenantName, tenantSlug]
