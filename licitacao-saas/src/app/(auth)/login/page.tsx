@@ -19,18 +19,28 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
+    const nextPath =
+      typeof window !== "undefined"
+        ? new URLSearchParams(window.location.search).get("next")
+        : null;
+    const callbackUrl =
+      nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")
+        ? nextPath
+        : "/";
+
     const formData = new FormData(e.currentTarget);
     const result = await signIn("credentials", {
       email: formData.get("email"),
       password: formData.get("password"),
       redirect: false,
+      callbackUrl,
     });
 
     if (result?.error) {
       setError("Email ou senha incorretos");
       setLoading(false);
     } else {
-      router.push("/");
+      router.push(result?.url || callbackUrl);
       router.refresh();
     }
   }
