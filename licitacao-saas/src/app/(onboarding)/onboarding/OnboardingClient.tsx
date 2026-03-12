@@ -51,11 +51,19 @@ export default function OnboardingClient() {
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const redirectToLogin = useCallback(() => {
+    router.replace('/login?next=/onboarding');
+  }, [router]);
 
   const fetchSession = useCallback(async () => {
     try {
       const res = await fetch('/api/onboarding/session', { cache: 'no-store' });
       const data = await res.json().catch(() => null);
+
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
 
       if (!res.ok) {
         throw new Error(getErrorMessage(data, 'Não foi possível carregar sua sessão de onboarding.'));
@@ -80,7 +88,7 @@ export default function OnboardingClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [router, toast]);
+  }, [redirectToLogin, router, toast]);
 
   useEffect(() => {
     fetchSession();
@@ -95,6 +103,16 @@ export default function OnboardingClient() {
         body: JSON.stringify({ step, data }),
       });
       const payload = await res.json().catch(() => null);
+
+      if (res.status === 401) {
+        toast({
+          title: 'Sessão expirada',
+          description: 'Faça login novamente para continuar o onboarding.',
+          variant: 'destructive',
+        });
+        redirectToLogin();
+        return false;
+      }
 
       if (!res.ok) {
         const message = getErrorMessage(payload, 'Não foi possível salvar os dados.');
@@ -121,7 +139,7 @@ export default function OnboardingClient() {
     } finally {
       setIsSaving(false);
     }
-  }, [toast]);
+  }, [redirectToLogin, toast]);
 
   const handleNext = async (data: Record<string, unknown>) => {
     const success = await saveStep(currentStep + 1, data);
