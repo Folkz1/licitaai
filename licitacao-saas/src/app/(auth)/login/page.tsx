@@ -3,6 +3,7 @@
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,6 +82,21 @@ export default function LoginPage() {
               {loading ? "Entrando..." : "Entrar"}
             </Button>
           </form>
+
+          <div className="mt-6 border-t border-slate-800 pt-6 text-center">
+            <p className="text-sm text-slate-400 mb-3">
+              Ainda não tem conta?
+            </p>
+            <Link
+              href="/onboarding"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-500/20 hover:text-emerald-300"
+            >
+              Teste grátis por 7 dias
+            </Link>
+            <p className="mt-2 text-xs text-slate-500">
+              Sem cartão de crédito. Cancele quando quiser.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
