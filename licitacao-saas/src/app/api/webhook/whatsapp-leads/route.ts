@@ -13,6 +13,12 @@ const OPT_OUT_KEYWORDS = ["parar", "cancelar", "sair", "nao quero", "nao", "pare
 const START_KEYWORDS = ["licitai", "licita ai", "trial licitai", "teste licitai", "diagnostico licitai", "quero licitai"];
 const RESEND_KEYWORDS = ["link", "acesso", "senha", "entrar", "reenviar"];
 
+// Números de parceiros/clientes conhecidos que NUNCA devem entrar no fluxo de onboarding
+const IGNORED_PHONES = [
+  "5519982447485", // Emilio (parceiro Superbot)
+  "555193448124",  // Diego (dono)
+];
+
 type ConversationRow = {
   id: string;
   lead_id: string | null;
@@ -156,6 +162,28 @@ export async function POST(req: NextRequest) {
     const phone = normalizePhone(remoteJid.replace("@s.whatsapp.net", ""));
     if (!phone) {
       return NextResponse.json({ ok: true });
+    }
+
+    // Ignorar números de parceiros/clientes conhecidos (hardcoded)
+    if (IGNORED_PHONES.some((p) => phone.includes(p.slice(-11)) || p.includes(phone.slice(-11)))) {
+      return NextResponse.json({ ok: true, ignored: "known_contact" });
+    }
+
+    // Ignorar contatos existentes na Orquestra (checagem dinâmica)
+    try {
+      const orqRes = await fetch(
+        `https://orquestra-backend.jz9bd8.easypanel.host/api/contacts?search=${phone.slice(-11)}`,
+        { headers: { Authorization: "Bearer orquestra-secret-key-2026" }, signal: AbortSignal.timeout(3000) }
+      );
+      if (orqRes.ok) {
+        const contacts = await orqRes.json();
+        const list = Array.isArray(contacts) ? contacts : contacts.items || [];
+        if (list.length > 0) {
+          return NextResponse.json({ ok: true, ignored: "orquestra_contact" });
+        }
+      }
+    } catch {
+      // Orquestra indisponível — segue fluxo normal
     }
 
     const lowerMessage = normalizeText(message);
