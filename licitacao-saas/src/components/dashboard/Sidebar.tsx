@@ -42,7 +42,7 @@ const adminItems = [
 
 export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
-  const isAdmin = user.role === "SUPER_ADMIN" || user.role === "ADMIN";
+  const isAdmin = user.role === "SUPER_ADMIN";
 
   return (
     <aside className="flex w-64 flex-col border-r border-slate-800/60 bg-gradient-to-b from-slate-900/95 to-slate-950/95">

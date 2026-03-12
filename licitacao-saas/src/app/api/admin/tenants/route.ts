@@ -1,10 +1,11 @@
 import { auth } from "@/lib/auth";
+import { isSuperAdmin } from "@/lib/admin";
 import { query, queryOne } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET() {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -25,7 +26,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
 // Update tenant
 export async function PUT(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -103,7 +104,7 @@ export async function PUT(req: NextRequest) {
 // Toggle active/inactive
 export async function PATCH(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

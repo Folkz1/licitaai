@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { isSuperAdmin } from "@/lib/admin";
 import { query } from "@/lib/db";
 import { PORTAL_PUBLIC_TENANT_ID, UF_NAMES } from "@/lib/portal";
 import { NextResponse } from "next/server";
@@ -47,7 +48,7 @@ function toNumber(value: string | number | null | undefined): number {
 
 export async function GET() {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

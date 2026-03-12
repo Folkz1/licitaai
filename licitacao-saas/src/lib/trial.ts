@@ -684,7 +684,7 @@ export async function createTrialWorkspace(
       const user = await queryOneTx<{ id: string }>(
         client,
         `INSERT INTO users (tenant_id, email, nome, password_hash, role, ativo)
-         VALUES ($1, $2, $3, $4, 'ADMIN', true)
+         VALUES ($1, $2, $3, $4, 'ANALYST', true)
          RETURNING id`,
         [tenantId, email, input.nome.trim(), passwordHash]
       );

@@ -101,7 +101,7 @@ async function ensureTestUser(pool: Pool) {
 
   await pool.query(
     `INSERT INTO users (tenant_id, email, nome, password_hash, role, ativo)
-     VALUES ($1, $2, $3, $4, 'ADMIN', true)`,
+     VALUES ($1, $2, $3, $4, 'ANALYST', true)`,
     [tenant.rows[0].id, email, "Codex Teste", passwordHash]
   );
 

@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth";
+import { isSuperAdmin } from "@/lib/admin";
 import { query } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -7,7 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 // Licitações com análise NUNCA são removidas.
 export async function DELETE(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -57,7 +58,7 @@ export async function DELETE(req: NextRequest) {
 // GET /api/admin/cleanup - preview sem deletar
 export async function GET(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

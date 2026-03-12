@@ -1,10 +1,11 @@
 import { auth } from "@/lib/auth";
+import { isSuperAdmin } from "@/lib/admin";
 import { query, queryOne } from "@/lib/db";
 import { NextResponse } from "next/server";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

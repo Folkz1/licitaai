@@ -1,15 +1,14 @@
 import { auth } from "@/lib/auth";
+import { isSuperAdmin } from "@/lib/admin";
 import { query, queryOne } from "@/lib/db";
 import { hash } from "bcryptjs";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET() {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
-
-  const isSuperAdmin = session.user.role === "SUPER_ADMIN";
   const users = await query(
     `SELECT u.id, u.email, u.nome as name, u.role, u.ativo as is_active, 
             u.ultimo_login as last_login_at, u.created_at,
@@ -17,9 +16,8 @@ export async function GET() {
             t.nome as tenant_nome
      FROM users u
      JOIN tenants t ON t.id = u.tenant_id
-     ${isSuperAdmin ? "" : "WHERE u.tenant_id = $1"}
      ORDER BY u.created_at DESC`,
-    isSuperAdmin ? [] : [session.user.tenantId]
+    []
   );
 
   return NextResponse.json(users);
@@ -27,9 +25,10 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const activeSession = session!;
 
   const { email, name, password, role, tenantId } = await req.json();
 
@@ -41,9 +40,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Senha deve ter no mínimo 6 caracteres" }, { status: 400 });
   }
 
-  const targetTenantId = session.user.role === "SUPER_ADMIN" 
-    ? (tenantId || session.user.tenantId) 
-    : session.user.tenantId;
+  const targetTenantId = tenantId || activeSession.user.tenantId;
 
   // Validate that the tenant exists
   const tenantExists = await queryOne("SELECT id FROM tenants WHERE id = $1", [targetTenantId]);
@@ -56,8 +53,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Email já cadastrado" }, { status: 400 });
   }
 
-  // Non-SUPER_ADMIN can't create SUPER_ADMIN users
-  const finalRole = session.user.role !== "SUPER_ADMIN" && role === "SUPER_ADMIN" ? "ADMIN" : (role || "VIEWER");
+  const finalRole = role || "VIEWER";
 
   const passwordHash = await hash(password, 12);
 
@@ -74,7 +70,7 @@ export async function POST(req: NextRequest) {
 // Update user
 export async function PUT(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
@@ -94,8 +90,7 @@ export async function PUT(req: NextRequest) {
     values.push(name);
   }
   if (role) {
-    // Non-SUPER_ADMIN can't promote to SUPER_ADMIN
-    const finalRole = session.user.role !== "SUPER_ADMIN" && role === "SUPER_ADMIN" ? "ADMIN" : role;
+    const finalRole = role;
     updates.push(`role = $${paramIdx++}`);
     values.push(finalRole);
   }
@@ -104,7 +99,7 @@ export async function PUT(req: NextRequest) {
     updates.push(`password_hash = $${paramIdx++}`);
     values.push(passwordHash);
   }
-  if (tenantId && session.user.role === "SUPER_ADMIN") {
+  if (tenantId) {
     updates.push(`tenant_id = $${paramIdx++}`);
     values.push(tenantId);
   }
@@ -126,16 +121,17 @@ export async function PUT(req: NextRequest) {
 // Toggle active/inactive
 export async function PATCH(req: NextRequest) {
   const session = await auth();
-  if (!session || !["SUPER_ADMIN", "ADMIN"].includes(session.user.role)) {
+  if (!isSuperAdmin(session)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+  const activeSession = session!;
 
   const { searchParams } = new URL(req.url);
   const id = searchParams.get("id");
   if (!id) return NextResponse.json({ error: "ID obrigatório" }, { status: 400 });
 
   // Don't allow deactivating yourself
-  if (id === session.user.id) {
+  if (id === activeSession.user.id) {
     return NextResponse.json({ error: "Não é possível desativar seu próprio usuário" }, { status: 400 });
   }
 
