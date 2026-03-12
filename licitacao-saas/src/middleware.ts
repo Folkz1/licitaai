@@ -42,7 +42,8 @@ export function middleware(req: NextRequest) {
     pathname === "/sitemap.xml" ||
     pathname.startsWith("/sitemap") ||
     pathname === "/robots.txt" ||
-    pathname.startsWith("/guia")
+    pathname.startsWith("/guia") ||
+    pathname.endsWith(".html")
   ) {
     return NextResponse.next();
   }
