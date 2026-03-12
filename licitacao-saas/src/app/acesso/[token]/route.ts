@@ -5,6 +5,27 @@ import { createHash } from "crypto";
 
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60;
 
+function resolveAppUrl(request: NextRequest): string {
+  const configuredUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL;
+  if (configuredUrl) {
+    return configuredUrl;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  const host = request.headers.get("host");
+  if (host) {
+    const proto = request.nextUrl.protocol.replace(":", "") || "https";
+    return `${proto}://${host}`;
+  }
+
+  return request.nextUrl.origin;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
@@ -42,19 +63,19 @@ export async function GET(
   );
 
   if (!accessToken) {
-    return NextResponse.redirect(new URL("/login?trial=link-invalido", request.url));
+    return NextResponse.redirect(new URL("/login?trial=link-invalido", resolveAppUrl(request)));
   }
 
   if (new Date(accessToken.expires_at).getTime() < Date.now()) {
-    return NextResponse.redirect(new URL("/login?trial=link-expirado", request.url));
+    return NextResponse.redirect(new URL("/login?trial=link-expirado", resolveAppUrl(request)));
   }
 
   const secret = process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET;
   if (!secret) {
-    return NextResponse.redirect(new URL("/login?trial=auth-indisponivel", request.url));
+    return NextResponse.redirect(new URL("/login?trial=auth-indisponivel", resolveAppUrl(request)));
   }
 
-  const appUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || request.nextUrl.origin;
+  const appUrl = resolveAppUrl(request);
   const useSecureCookies = appUrl.startsWith("https://") && !appUrl.includes("localhost");
   const cookieName = useSecureCookies ? "__Secure-authjs.session-token" : "authjs.session-token";
 
@@ -80,7 +101,7 @@ export async function GET(
   ).catch(() => {});
 
   const redirectPath = accessToken.onboarding_completed ? "/dashboard" : "/onboarding";
-  const response = NextResponse.redirect(new URL(redirectPath, request.url));
+  const response = NextResponse.redirect(new URL(redirectPath, appUrl));
 
   response.cookies.set(cookieName, sessionToken, {
     httpOnly: true,
