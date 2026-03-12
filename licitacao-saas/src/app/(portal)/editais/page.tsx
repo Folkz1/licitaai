@@ -1,6 +1,6 @@
 import { query, queryOne } from "@/lib/db";
 import { formatCurrency } from "@/lib/formatters";
-import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
+import { APP_URL, PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { Metadata } from "next";
 import Link from "next/link";
 import { Search, FileText, ArrowLeft, ArrowRight, SlidersHorizontal, Sparkles, Users } from "lucide-react";
@@ -31,10 +31,15 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   if (sp.uf) parts.push(sp.uf);
   if (sp.q) parts.push(`"${sp.q}"`);
   const title = `${parts.join(" - ")} | LicitaIA`;
+  // Canonical always points to the base URL without search params to avoid duplicate content
+  const canonicalUrl = `${APP_URL}/editais`;
   return {
     title,
     description: `Busque editais de licitação do PNCP${sp.uf ? ` em ${sp.uf}` : ""}${sp.q ? ` sobre ${sp.q}` : ""}. Análise com IA disponível.`,
-    openGraph: { title, type: "website", siteName: "LicitaIA" },
+    alternates: {
+      canonical: canonicalUrl,
+    },
+    openGraph: { title, type: "website", siteName: "LicitaIA", url: canonicalUrl },
   };
 }
 

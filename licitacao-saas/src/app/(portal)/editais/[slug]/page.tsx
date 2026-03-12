@@ -93,17 +93,21 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const uf = normalizePortalUf(slug) as PortalUf;
     const stateName = UF_NAMES[uf];
     const count = await getStateCount(uf);
-    const title = `Licitações em ${stateName} (${uf}) - ${count} editais abertos | LicitaIA`;
-    const description = `${count} licitações abertas em ${stateName}. Pregão eletrônico, dispensa, concorrência e análise com IA gratuita.`;
+    const title = `Licitações Abertas em ${stateName} (${uf}) — Editais PNCP 2026 | LicitaIA`;
+    const description = `Encontre ${count}+ editais de licitações abertas em ${stateName}. Busca inteligente com IA no PNCP. Pregões, dispensas e concorrências atualizados diariamente.`;
+    const canonicalUrl = `${APP_URL}/editais/${uf.toLowerCase()}`;
 
     return {
       title,
       description,
+      alternates: {
+        canonical: canonicalUrl,
+      },
       openGraph: {
         title,
         description,
         type: "website",
-        url: `${APP_URL}/editais/${uf.toLowerCase()}`,
+        url: canonicalUrl,
         siteName: "LicitaIA",
       },
       twitter: {
@@ -131,6 +135,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${title} | LicitaIA`,
     description,
+    alternates: {
+      canonical: `${appUrl}/editais/${slug}`,
+    },
     openGraph: {
       title,
       description,

@@ -55,6 +55,9 @@ export const metadata: Metadata = {
   title: "Planos e Precos - LicitaIA",
   description:
     "Compare os planos do LicitaIA para monitorar, buscar e analisar licitacoes com inteligencia artificial.",
+  alternates: {
+    canonical: `${APP_URL}/precos`,
+  },
   openGraph: {
     title: "Planos e Precos - LicitaIA",
     description:
@@ -107,6 +110,19 @@ export default async function PrecosPage() {
     })),
   };
 
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ_ITEMS.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer,
+      },
+    })),
+  };
+
   const comparisonRows = [
     {
       label: "Licitacoes por mes",
@@ -145,6 +161,10 @@ export default async function PrecosPage() {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
 
       <div className="bg-slate-950 text-white">
