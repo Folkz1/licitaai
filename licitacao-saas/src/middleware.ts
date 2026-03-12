@@ -40,7 +40,9 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/_next") ||
     pathname === "/favicon.ico" ||
     pathname === "/sitemap.xml" ||
-    pathname === "/robots.txt"
+    pathname.startsWith("/sitemap") ||
+    pathname === "/robots.txt" ||
+    pathname.startsWith("/guia")
   ) {
     return NextResponse.next();
   }
