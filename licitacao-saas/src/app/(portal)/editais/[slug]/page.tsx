@@ -174,17 +174,27 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
 
   if (!licitacao) notFound();
 
-  // Análise IA (preview)
+  // Análise IA (enriched public preview)
   const analise = await queryOne<{
     prioridade: string;
     score_relevancia: number;
     justificativa: string;
     documentos_necessarios: string;
+    analise_riscos: string;
+    preferencias_me_epp: string;
+    prazos: string;
+    requisitos_tecnicos: string;
+    forma_fornecimento: string;
   }>(
     `SELECT a.prioridade,
             a.score_relevancia::FLOAT as score_relevancia,
             a.justificativa,
-            a.documentos_necessarios
+            a.documentos_necessarios,
+            a.analise_riscos,
+            a.preferencias_me_epp,
+            a.prazos,
+            a.requisitos_tecnicos,
+            a.forma_fornecimento
      FROM analises a
      JOIN licitacoes l ON l.id = a.licitacao_id
      WHERE l.numero_controle_pncp = $1
@@ -192,6 +202,18 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
      LIMIT 1`,
     [licitacao.numero_controle_pncp]
   );
+
+  // Parse analysis JSON fields safely
+  let meEpp: { exclusivo_me_epp?: boolean; margem_preferencia_percentual?: number; observacoes?: string } = {};
+  let riscos: { nivel_risco?: string; fatores?: string[] } = {};
+  let prazos: { prazo_entrega_dias?: number; prazo_vigencia_meses?: number } = {};
+  let docsCount = 0;
+  let reqCount = 0;
+  try { meEpp = analise?.preferencias_me_epp ? JSON.parse(analise.preferencias_me_epp) : {}; } catch {}
+  try { riscos = analise?.analise_riscos ? JSON.parse(analise.analise_riscos) : {}; } catch {}
+  try { prazos = analise?.prazos ? JSON.parse(analise.prazos) : {}; } catch {}
+  try { docsCount = analise?.documentos_necessarios ? JSON.parse(analise.documentos_necessarios).length : 0; } catch {}
+  try { reqCount = analise?.requisitos_tecnicos ? JSON.parse(analise.requisitos_tecnicos).length : 0; } catch {}
 
   // Itens
   const itens = await query<{
@@ -245,12 +267,15 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
     REJEITAR: "bg-slate-500/15 text-slate-400 border-slate-500/20",
   };
 
-  // JSON-LD structured data
+  // JSON-LD structured data (enriched for Google)
+  const isOpen = licitacao.data_encerramento_proposta && new Date(licitacao.data_encerramento_proposta) > new Date();
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "GovernmentService",
     name: licitacao.objeto_compra,
-    description: licitacao.objeto_compra,
+    description: analise?.justificativa
+      ? `${licitacao.objeto_compra}. ${analise.justificativa.slice(0, 300)}`
+      : licitacao.objeto_compra,
     provider: {
       "@type": "GovernmentOrganization",
       name: licitacao.orgao_nome,
@@ -265,6 +290,17 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
       "@type": "AdministrativeArea",
       name: licitacao.uf,
     },
+    ...(licitacao.valor_total_estimado ? {
+      offers: {
+        "@type": "Offer",
+        price: licitacao.valor_total_estimado,
+        priceCurrency: "BRL",
+        availability: isOpen ? "https://schema.org/InStock" : "https://schema.org/SoldOut",
+        validThrough: licitacao.data_encerramento_proposta,
+      },
+    } : {}),
+    datePublished: licitacao.data_publicacao,
+    identifier: licitacao.numero_controle_pncp,
   };
 
   return (
@@ -413,11 +449,92 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
               </div>
             )}
 
+            {/* Public Analysis Insights (SEO + Value) */}
+            {analise && (
+              <div className="rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-950/50 p-6 space-y-4">
+                <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-indigo-400" />
+                  Inteligência sobre este edital
+                </h2>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {/* ME/EPP */}
+                  {meEpp.exclusivo_me_epp !== undefined && (
+                    <div className={`rounded-lg border p-3 ${meEpp.exclusivo_me_epp ? "border-emerald-500/30 bg-emerald-500/5" : "border-slate-800/60 bg-slate-900/50"}`}>
+                      <p className="text-xs text-slate-500 mb-1">ME/EPP</p>
+                      <p className={`text-sm font-medium ${meEpp.exclusivo_me_epp ? "text-emerald-400" : "text-slate-400"}`}>
+                        {meEpp.exclusivo_me_epp ? "Exclusivo para ME/EPP" : "Ampla concorrência"}
+                      </p>
+                      {meEpp.margem_preferencia_percentual != null && meEpp.margem_preferencia_percentual > 0 && (
+                        <p className="text-xs text-slate-500 mt-0.5">Margem de preferência: {meEpp.margem_preferencia_percentual}%</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Risk Level */}
+                  {riscos.nivel_risco && (
+                    <div className={`rounded-lg border p-3 ${
+                      riscos.nivel_risco === "BAIXO" ? "border-emerald-500/30 bg-emerald-500/5" :
+                      riscos.nivel_risco === "MEDIO" ? "border-amber-500/30 bg-amber-500/5" :
+                      "border-red-500/30 bg-red-500/5"
+                    }`}>
+                      <p className="text-xs text-slate-500 mb-1">Nível de Risco</p>
+                      <p className={`text-sm font-medium ${
+                        riscos.nivel_risco === "BAIXO" ? "text-emerald-400" :
+                        riscos.nivel_risco === "MEDIO" ? "text-amber-400" : "text-red-400"
+                      }`}>
+                        {riscos.nivel_risco === "BAIXO" ? "Baixo" : riscos.nivel_risco === "MEDIO" ? "Médio" : "Alto"}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Documents Required */}
+                  {docsCount > 0 && (
+                    <div className="rounded-lg border border-slate-800/60 bg-slate-900/50 p-3">
+                      <p className="text-xs text-slate-500 mb-1">Documentos Exigidos</p>
+                      <p className="text-sm font-medium text-slate-300">{docsCount} documentos identificados</p>
+                    </div>
+                  )}
+
+                  {/* Technical Requirements */}
+                  {reqCount > 0 && (
+                    <div className="rounded-lg border border-slate-800/60 bg-slate-900/50 p-3">
+                      <p className="text-xs text-slate-500 mb-1">Requisitos Técnicos</p>
+                      <p className="text-sm font-medium text-slate-300">{reqCount} requisitos identificados</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Justificativa (full, public - SEO content) */}
+                {analise.justificativa && (
+                  <div className="border-t border-slate-800/40 pt-4">
+                    <p className="text-xs text-slate-500 mb-2">Resumo da análise IA</p>
+                    <p className="text-sm text-slate-400 leading-relaxed">{analise.justificativa}</p>
+                  </div>
+                )}
+
+                {/* Risk Factors */}
+                {riscos.fatores && riscos.fatores.length > 0 && (
+                  <div className="border-t border-slate-800/40 pt-4">
+                    <p className="text-xs text-slate-500 mb-2">Fatores de atenção</p>
+                    <ul className="space-y-1">
+                      {riscos.fatores.slice(0, 3).map((f, i) => (
+                        <li key={i} className="text-sm text-slate-400 flex items-start gap-2">
+                          <span className="text-amber-500 mt-1">•</span>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* AI Analysis Preview (Gated) */}
             <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-br from-indigo-950/20 to-slate-950/50 p-6">
               <div className="flex items-center gap-2 mb-4">
                 <Sparkles className="h-4 w-4 text-indigo-400" />
-                <h2 className="text-sm font-semibold text-slate-300">Análise por IA</h2>
+                <h2 className="text-sm font-semibold text-slate-300">Análise completa por IA</h2>
               </div>
 
               {analise ? (
