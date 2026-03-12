@@ -42,6 +42,12 @@ export default function PortalLayout({
               Blog
             </Link>
             <Link
+              href="/guia/como-participar-de-licitacoes"
+              className="text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              Guias
+            </Link>
+            <Link
               href="/precos"
               className="text-sm text-slate-400 hover:text-white transition-colors"
             >
@@ -96,6 +102,26 @@ export default function PortalLayout({
                 <li>
                   <Link href="/login" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
                     Acessar Plataforma
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-sm font-semibold text-slate-300 mb-3">Guias</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/guia/como-participar-de-licitacoes" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+                    Como Participar de Licitações
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/guia/como-vender-para-o-governo" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+                    Como Vender para o Governo
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/guia/nova-lei-14133-licitacoes" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+                    Nova Lei 14.133
                   </Link>
                 </li>
               </ul>

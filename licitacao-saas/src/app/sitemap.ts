@@ -60,6 +60,25 @@ export default async function sitemap({
         changeFrequency: "daily",
         priority: 0.8,
       },
+      // Pillar pages (guias SEO)
+      {
+        url: `${APP_URL}/guia/como-participar-de-licitacoes`,
+        lastModified: new Date(),
+        changeFrequency: "monthly",
+        priority: 0.9,
+      },
+      {
+        url: `${APP_URL}/guia/como-vender-para-o-governo`,
+        lastModified: new Date(),
+        changeFrequency: "monthly",
+        priority: 0.9,
+      },
+      {
+        url: `${APP_URL}/guia/nova-lei-14133-licitacoes`,
+        lastModified: new Date(),
+        changeFrequency: "monthly",
+        priority: 0.9,
+      },
       ...PORTAL_UFS.map((uf) => ({
         url: `${APP_URL}/editais/${uf.toLowerCase()}`,
         lastModified: new Date(),
