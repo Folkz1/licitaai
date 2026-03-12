@@ -42,6 +42,7 @@ interface BlogPost {
   slug: string;
   title: string;
   description: string | null;
+  cover_image_url: string | null;
   category: string;
   tags: string[];
   read_time_minutes: number;
@@ -71,7 +72,7 @@ export default async function BlogListPage({ searchParams }: Props) {
 
   const [posts, countRow] = await Promise.all([
     query<BlogPost>(
-      `SELECT id, slug, title, description, category, tags, read_time_minutes, view_count, published_at
+      `SELECT id, slug, title, description, cover_image_url, category, tags, read_time_minutes, view_count, published_at
        FROM blog_posts ${where}
        ORDER BY published_at DESC
        LIMIT ${PAGE_SIZE} OFFSET ${offset}`,
@@ -149,8 +150,21 @@ export default async function BlogListPage({ searchParams }: Props) {
             {posts.map((post) => (
               <article
                 key={post.id}
-                className="group rounded-3xl border border-slate-800 bg-slate-900/70 p-6 transition hover:border-slate-700"
+                className="group rounded-3xl border border-slate-800 bg-slate-900/70 overflow-hidden transition hover:border-slate-700"
               >
+                {post.cover_image_url && (
+                  <Link href={`/blog/${post.slug}`}>
+                    <div className="aspect-[16/9] overflow-hidden">
+                      <img
+                        src={post.cover_image_url}
+                        alt={post.title}
+                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        loading="lazy"
+                      />
+                    </div>
+                  </Link>
+                )}
+                <div className="p-6">
                 <Badge
                   className={`${CATEGORY_COLORS[post.category] || CATEGORY_COLORS.dica} border`}
                 >
@@ -180,6 +194,7 @@ export default async function BlogListPage({ searchParams }: Props) {
                     <Eye className="h-3.5 w-3.5" />
                     {post.view_count}
                   </span>
+                </div>
                 </div>
               </article>
             ))}

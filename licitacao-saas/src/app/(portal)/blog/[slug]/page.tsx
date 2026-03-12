@@ -21,6 +21,7 @@ interface BlogPost {
   author: string;
   seo_title: string | null;
   seo_description: string | null;
+  cover_image_url: string | null;
   read_time_minutes: number;
   view_count: number;
   published_at: string;
@@ -46,15 +47,15 @@ async function getPost(slug: string) {
      SET view_count = view_count + 1, updated_at = NOW()
      WHERE slug = $1 AND status = 'published'
      RETURNING id, slug, title, description, content, category, tags, author,
-       seo_title, seo_description, read_time_minutes, view_count, published_at, created_at`,
+       seo_title, seo_description, cover_image_url, read_time_minutes, view_count, published_at, created_at`,
     [slug]
   );
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const post = await queryOne<{ title: string; seo_title: string | null; seo_description: string | null; description: string | null }>(
-    `SELECT title, seo_title, seo_description, description FROM blog_posts WHERE slug = $1 AND status = 'published'`,
+  const post = await queryOne<{ title: string; seo_title: string | null; seo_description: string | null; description: string | null; cover_image_url: string | null }>(
+    `SELECT title, seo_title, seo_description, description, cover_image_url FROM blog_posts WHERE slug = $1 AND status = 'published'`,
     [slug]
   );
 
@@ -72,6 +73,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       type: "article",
       url: `${APP_URL}/blog/${slug}`,
       siteName: "LicitaIA",
+      ...(post.cover_image_url ? { images: [{ url: post.cover_image_url, width: 1200, height: 630 }] } : {}),
     },
   };
 }
@@ -124,6 +126,16 @@ export default async function BlogPostPage({ params }: Props) {
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
           {/* Main */}
           <article className="space-y-6">
+            {post.cover_image_url && (
+              <div className="relative aspect-[1200/630] overflow-hidden rounded-2xl border border-slate-800">
+                <img
+                  src={post.cover_image_url}
+                  alt={post.title}
+                  className="h-full w-full object-cover"
+                  loading="eager"
+                />
+              </div>
+            )}
             <header>
               <Badge className="bg-indigo-500/10 text-indigo-300 border border-indigo-500/30">
                 {CATEGORY_LABELS[post.category] || post.category}

@@ -20,6 +20,7 @@ interface GeneratedPost {
   seo_title: string;
   seo_description: string;
   read_time_minutes: number;
+  cover_search_term: string;
 }
 
 const QUERIES: Record<string, string> = {
@@ -74,6 +75,33 @@ const GUIA_TOPICS = [
   },
 ];
 
+// Unsplash images by category (royalty-free, no API key needed)
+const COVER_SEARCH_TERMS: Record<string, string[]> = {
+  resumo_semanal: ["government building brazil", "business meeting office", "contract signing"],
+  top_valor: ["business opportunity", "investment growth chart", "corporate finance"],
+  segmento: ["market analysis data", "industry sectors", "business strategy planning"],
+  ranking_cidades: ["brazilian city skyline", "urban development brazil", "city business district"],
+  guia: ["business education learning", "professional training", "entrepreneur working laptop"],
+};
+
+function getUnsplashUrl(searchTerm: string): string {
+  // Unsplash Source API - returns a random photo matching the search term
+  // 1200x630 is optimal for OG images and blog covers
+  return `https://images.unsplash.com/photo-1589829545856-d10d557cf95f?w=1200&h=630&fit=crop&q=80`;
+}
+
+async function searchUnsplash(term: string): Promise<string> {
+  try {
+    // Use Unsplash source redirect (no API key needed, returns random matching photo)
+    const url = `https://source.unsplash.com/1200x630/?${encodeURIComponent(term)}`;
+    const res = await fetch(url, { method: "HEAD", redirect: "follow", signal: AbortSignal.timeout(5000) });
+    // The final URL after redirect is the actual image
+    return res.url || getUnsplashUrl(term);
+  } catch {
+    return getUnsplashUrl(term);
+  }
+}
+
 function buildPrompt(type: BlogPostType, data: unknown): string {
   const tipoLabel: Record<BlogPostType, string> = {
     resumo_semanal: "Resumo Semanal de Licitações",
@@ -83,36 +111,51 @@ function buildPrompt(type: BlogPostType, data: unknown): string {
     guia: "Guia Educacional sobre Licitações",
   };
 
-  return `Você é um especialista em licitações públicas no Brasil escrevendo para o blog do LicitaIA.
+  return `Você é um jornalista especializado em licitações públicas e compras governamentais no Brasil, com 15 anos de experiência cobrindo o setor. Escreve para o blog do LicitaIA com autoridade, profundidade e linguagem acessível.
 
 TIPO DE POST: ${tipoLabel[type]}
-DADOS REAIS DO BANCO (use esses números no artigo):
+DADOS REAIS DO BANCO DE DADOS (use esses números no artigo — NUNCA invente dados):
 ${JSON.stringify(data, null, 2)}
 
-REGRAS:
-- Título chamativo com número ou dado real (ex: "450 licitações abertas em SP esta semana")
-- 800-1500 palavras em markdown
-- Subtítulos H2 com keywords relevantes para SEO
-- Usar os dados reais (valores em R$, quantidades, estados, cidades)
-- Incluir pelo menos 3 links internos para páginas do LicitaIA:
-  - /editais/{uf} para estados mencionados (use a sigla em minúsculo)
+ESTILO DE ESCRITA OBRIGATÓRIO:
+- Escreva como um colunista do Valor Econômico ou JOTA: informativo, analítico, com opinião fundamentada
+- Abra com um lide forte (fato impactante ou dado surpreendente) que prenda o leitor
+- Use parágrafos curtos (2-3 frases máximo)
+- Inclua análise e contexto, não apenas dados — EXPLIQUE o que os números significam
+- Quando mencionar valores, compare com referências (ex: "equivalente ao orçamento anual de uma cidade de 50 mil habitantes")
+- Inclua pelo menos uma citação ou referência à legislação vigente (Lei 14.133/2021)
+- Termine com insight acionável: o que o leitor deve FAZER com essa informação
+- Tom: profissional mas humano, nunca burocrático ou robótico
+- PROIBIDO: frases genéricas como "neste artigo vamos abordar", "confira abaixo", "sem mais delongas"
+- PROIBIDO: listas com mais de 5 itens seguidos (quebre com parágrafos analíticos entre elas)
+
+ESTRUTURA:
+- Título chamativo com dado real e número (ex: "R$ 2,3 bilhões em licitações abertas: SP lidera com 40% do volume")
+- 1200-2000 palavras em markdown bem formatado
+- Subtítulos H2 com keywords SEO naturais (não keyword-stuffing)
+- Incluir **pelo menos 3 links internos** naturalmente no texto:
+  - /editais/{uf} para estados mencionados (sigla minúscula)
   - /editais?q={keyword} para buscas relevantes
   - /precos para menção de planos
-- CTA no final: "Cadastre-se grátis no LicitaIA e receba alertas personalizados"
-- Tom: profissional, informativo, acessível
+  - /guia/como-participar-de-licitacoes para guia geral
+  - /guia/nova-lei-14133-licitacoes para referências à lei
+- CTA final natural (não forçado): "O LicitaIA monitora essas oportunidades diariamente..."
 - Português correto com acentuação (ç, ã, é, ô, etc.)
+
+CAMPO cover_search_term: inclua um termo de busca em inglês (2-3 palavras) para encontrar uma foto de capa relevante no Unsplash. Ex: "government building", "business meeting", "city skyline brazil"
 
 Retorne APENAS JSON válido (sem markdown wrapping, sem \`\`\`json):
 {
   "title": "...",
   "slug": "...-marco-2026",
-  "description": "...(max 160 chars)",
-  "content": "...(markdown completo)",
+  "description": "...(max 160 chars, gancho forte)",
+  "content": "...(markdown completo, 1200-2000 palavras)",
   "category": "${type === "guia" ? "guia" : type === "resumo_semanal" ? "resumo" : type === "top_valor" ? "mercado" : type === "segmento" ? "analise" : "mercado"}",
   "tags": ["licitação", "pregão", ...],
-  "seo_title": "...(max 60 chars)",
-  "seo_description": "...(max 160 chars)",
-  "read_time_minutes": N
+  "seo_title": "...(max 60 chars, com keyword principal)",
+  "seo_description": "...(max 160 chars, com CTA implícito)",
+  "read_time_minutes": N,
+  "cover_search_term": "..."
 }`;
 }
 
@@ -123,11 +166,11 @@ async function callGemini(prompt: string): Promise<GeneratedPost> {
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 4096,
+        temperature: 0.7,
+        maxOutputTokens: 8192,
       },
     }),
-    signal: AbortSignal.timeout(60_000),
+    signal: AbortSignal.timeout(90_000),
   });
 
   if (!res.ok) {
@@ -170,6 +213,13 @@ export async function generateBlogPost(type: BlogPostType): Promise<{
   const prompt = buildPrompt(type, data);
   const post = await callGemini(prompt);
 
+  // Get cover image from Unsplash
+  const searchTerm =
+    post.cover_search_term ||
+    COVER_SEARCH_TERMS[type]?.[Math.floor(Math.random() * (COVER_SEARCH_TERMS[type]?.length || 1))] ||
+    "business government";
+  const coverImageUrl = await searchUnsplash(searchTerm);
+
   // Ensure unique slug
   const existing = await queryOne<{ id: string }>(
     "SELECT id FROM blog_posts WHERE slug = $1",
@@ -180,8 +230,8 @@ export async function generateBlogPost(type: BlogPostType): Promise<{
   }
 
   const result = await queryOne<{ id: string; slug: string; title: string }>(
-    `INSERT INTO blog_posts (slug, title, description, content, category, tags, seo_title, seo_description, read_time_minutes, generated_by, source_query, source_data, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'ai', $10, $11, 'draft')
+    `INSERT INTO blog_posts (slug, title, description, content, category, tags, seo_title, seo_description, read_time_minutes, cover_image_url, generated_by, source_query, source_data, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'ai', $11, $12, 'draft')
      RETURNING id, slug, title`,
     [
       post.slug,
@@ -193,6 +243,7 @@ export async function generateBlogPost(type: BlogPostType): Promise<{
       post.seo_title,
       post.seo_description,
       post.read_time_minutes,
+      coverImageUrl,
       sourceQuery,
       JSON.stringify(data),
     ]
