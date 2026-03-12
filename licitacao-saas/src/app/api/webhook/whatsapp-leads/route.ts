@@ -10,7 +10,7 @@ import {
 import { NextRequest, NextResponse } from "next/server";
 
 const OPT_OUT_KEYWORDS = ["parar", "cancelar", "sair", "nao quero", "nao", "pare", "stop"];
-const START_KEYWORDS = ["licitai", "licita ai", "trial", "teste", "diagnostico", "quero"];
+const START_KEYWORDS = ["licitai", "licita ai", "trial licitai", "teste licitai", "diagnostico licitai", "quero licitai"];
 const RESEND_KEYWORDS = ["link", "acesso", "senha", "entrar", "reenviar"];
 
 type ConversationRow = {
@@ -161,13 +161,14 @@ export async function POST(req: NextRequest) {
     const lowerMessage = normalizeText(message);
     const isOptOut = OPT_OUT_KEYWORDS.some((keyword) => lowerMessage.includes(keyword));
 
-    if (isOptOut) {
+    let conversation = await loadConversation(phone);
+
+    // Only handle opt-out for contacts that already have a LicitaAI conversation
+    if (isOptOut && conversation) {
       await handleOptOut(phone);
       await sendWhatsApp(phone, "Tudo certo. Vou parar as mensagens do LicitaAI por aqui.");
       return NextResponse.json({ ok: true, optOut: true });
     }
-
-    let conversation = await loadConversation(phone);
 
     if (!conversation) {
       if (!shouldStartFlow(lowerMessage)) {
