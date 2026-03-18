@@ -12,6 +12,7 @@ interface Step1EmpresaProps {
   onBack: () => void;
   isLoading: boolean;
   isFirstStep: boolean;
+  requiresAccountSetup?: boolean;
 }
 
 const PORTES = [
@@ -22,9 +23,9 @@ const PORTES = [
 ];
 
 const SETORES = [
-  { value: 'COMERCIO', label: 'Comércio' },
-  { value: 'SERVICOS', label: 'Serviços' },
-  { value: 'INDUSTRIA', label: 'Indústria' },
+  { value: 'COMERCIO', label: 'Comercio' },
+  { value: 'SERVICOS', label: 'Servicos' },
+  { value: 'INDUSTRIA', label: 'Industria' },
   { value: 'MIXTO', label: 'Misto' },
 ];
 
@@ -32,6 +33,7 @@ export default function Step1Empresa({
   data,
   onNext,
   isLoading,
+  requiresAccountSetup = false,
 }: Step1EmpresaProps) {
   const [formData, setFormData] = useState({
     razao_social: (data?.razao_social as string) || '',
@@ -40,36 +42,65 @@ export default function Step1Empresa({
     porte: (data?.porte as string) || '',
     setor: (data?.setor as string) || '',
     descricao_livre: (data?.descricao_livre as string) || '',
+    nome_responsavel: (data?.nome_responsavel as string) || '',
+    email: (data?.email as string) || '',
+    telefone: (data?.telefone as string) || '',
+    senha: (data?.senha as string) || '',
+    confirmar_senha: (data?.confirmar_senha as string) || '',
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
-    
+
     if (!formData.razao_social.trim()) {
-      newErrors.razao_social = 'Razão social é obrigatória';
+      newErrors.razao_social = 'Razao social e obrigatoria';
     }
-    
+
     if (!formData.porte) {
-      newErrors.porte = 'Porte é obrigatório';
+      newErrors.porte = 'Porte e obrigatorio';
     }
-    
+
     if (!formData.setor) {
-      newErrors.setor = 'Setor é obrigatório';
+      newErrors.setor = 'Setor e obrigatorio';
     }
-    
+
     if (formData.cnpj && formData.cnpj.replace(/\D/g, '').length !== 14) {
-      newErrors.cnpj = 'CNPJ deve ter 14 dígitos';
+      newErrors.cnpj = 'CNPJ deve ter 14 digitos';
     }
-    
+
+    if (requiresAccountSetup) {
+      if (!formData.nome_responsavel.trim()) {
+        newErrors.nome_responsavel = 'Nome do responsavel e obrigatorio';
+      }
+
+      if (!formData.email.trim()) {
+        newErrors.email = 'Email e obrigatorio';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+        newErrors.email = 'Informe um email valido';
+      }
+
+      if (!formData.senha) {
+        newErrors.senha = 'Senha e obrigatoria';
+      } else if (formData.senha.length < 8) {
+        newErrors.senha = 'A senha precisa ter pelo menos 8 caracteres';
+      }
+
+      if (!formData.confirmar_senha) {
+        newErrors.confirmar_senha = 'Confirme sua senha';
+      } else if (formData.senha !== formData.confirmar_senha) {
+        newErrors.confirmar_senha = 'As senhas precisam ser iguais';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (validate()) {
       onNext(formData);
     }
@@ -85,12 +116,109 @@ export default function Step1Empresa({
       .slice(0, 18);
   };
 
+  const formatPhone = (value: string) => {
+    const numbers = value.replace(/\D/g, '').slice(0, 11);
+
+    if (numbers.length <= 2) return numbers;
+    if (numbers.length <= 7) return `(${numbers.slice(0, 2)}) ${numbers.slice(2)}`;
+    return `(${numbers.slice(0, 2)}) ${numbers.slice(2, 7)}-${numbers.slice(7)}`;
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {requiresAccountSetup && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
+          <h3 className="text-sm font-medium text-emerald-300">Dados de acesso</h3>
+          <p className="mt-1 text-sm text-slate-300">
+            Esses dados serao usados para criar sua conta e liberar o trial de 7 dias.
+          </p>
+        </div>
+      )}
+
+      {requiresAccountSetup && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="nome_responsavel" className="text-slate-300">
+              Nome do Responsavel *
+            </Label>
+            <Input
+              id="nome_responsavel"
+              value={formData.nome_responsavel}
+              onChange={(e) => setFormData({ ...formData, nome_responsavel: e.target.value })}
+              placeholder="Seu nome"
+              className="bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+            />
+            {errors.nome_responsavel && (
+              <span className="text-red-400 text-sm">{errors.nome_responsavel}</span>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="telefone" className="text-slate-300">
+              WhatsApp
+            </Label>
+            <Input
+              id="telefone"
+              value={formData.telefone}
+              onChange={(e) => setFormData({ ...formData, telefone: formatPhone(e.target.value) })}
+              placeholder="(11) 99999-9999"
+              className="bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="email" className="text-slate-300">
+              Email *
+            </Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="voce@empresa.com"
+              className="bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+            />
+            {errors.email && <span className="text-red-400 text-sm">{errors.email}</span>}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="senha" className="text-slate-300">
+              Senha *
+            </Label>
+            <Input
+              id="senha"
+              type="password"
+              value={formData.senha}
+              onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
+              placeholder="Minimo de 8 caracteres"
+              className="bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+            />
+            {errors.senha && <span className="text-red-400 text-sm">{errors.senha}</span>}
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="confirmar_senha" className="text-slate-300">
+              Confirmar Senha *
+            </Label>
+            <Input
+              id="confirmar_senha"
+              type="password"
+              value={formData.confirmar_senha}
+              onChange={(e) => setFormData({ ...formData, confirmar_senha: e.target.value })}
+              placeholder="Repita a senha"
+              className="bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
+            />
+            {errors.confirmar_senha && (
+              <span className="text-red-400 text-sm">{errors.confirmar_senha}</span>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="razao_social" className="text-slate-300">
-            Razão Social *
+            Razao Social *
           </Label>
           <Input
             id="razao_social"
@@ -130,9 +258,7 @@ export default function Step1Empresa({
           className="bg-slate-900/50 border-slate-600 text-white placeholder:text-slate-500"
           maxLength={18}
         />
-        {errors.cnpj && (
-          <span className="text-red-400 text-sm">{errors.cnpj}</span>
-        )}
+        {errors.cnpj && <span className="text-red-400 text-sm">{errors.cnpj}</span>}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -153,14 +279,12 @@ export default function Step1Empresa({
               </option>
             ))}
           </select>
-          {errors.porte && (
-            <span className="text-red-400 text-sm">{errors.porte}</span>
-          )}
+          {errors.porte && <span className="text-red-400 text-sm">{errors.porte}</span>}
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="setor" className="text-slate-300">
-            Setor de Atuação *
+            Setor de Atuacao *
           </Label>
           <select
             id="setor"
@@ -175,15 +299,13 @@ export default function Step1Empresa({
               </option>
             ))}
           </select>
-          {errors.setor && (
-            <span className="text-red-400 text-sm">{errors.setor}</span>
-          )}
+          {errors.setor && <span className="text-red-400 text-sm">{errors.setor}</span>}
         </div>
       </div>
 
       <div className="space-y-2">
         <Label htmlFor="descricao_livre" className="text-slate-300">
-          Descrição do Negócio (opcional)
+          Descricao do Negocio (opcional)
         </Label>
         <textarea
           id="descricao_livre"
@@ -207,7 +329,7 @@ export default function Step1Empresa({
             </>
           ) : (
             <>
-              Próximo
+              Proximo
               <ArrowRight className="w-4 h-4 ml-2" />
             </>
           )}

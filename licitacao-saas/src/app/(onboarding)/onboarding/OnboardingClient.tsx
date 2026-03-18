@@ -31,6 +31,11 @@ interface OnboardingSession {
   status: string;
 }
 
+interface OnboardingViewer {
+  mode: 'authenticated' | 'public';
+  isAuthenticated: boolean;
+}
+
 function getErrorMessage(payload: unknown, fallback: string): string {
   if (
     payload &&
@@ -47,33 +52,32 @@ function getErrorMessage(payload: unknown, fallback: string): string {
 export default function OnboardingClient() {
   const [currentStep, setCurrentStep] = useState(0);
   const [session, setSession] = useState<OnboardingSession | null>(null);
+  const [viewer, setViewer] = useState<OnboardingViewer>({
+    mode: 'public',
+    isAuthenticated: false,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
-  const redirectToLogin = useCallback(() => {
-    router.replace('/login?next=/onboarding');
-  }, [router]);
 
   const fetchSession = useCallback(async () => {
     try {
       const res = await fetch('/api/onboarding/session', { cache: 'no-store' });
       const data = await res.json().catch(() => null);
 
-      if (res.status === 401) {
-        redirectToLogin();
-        return;
-      }
-
       if (!res.ok) {
         throw new Error(getErrorMessage(data, 'Não foi possível carregar sua sessão de onboarding.'));
       }
 
       setSession(data.session);
+      setViewer(data.viewer || { mode: 'public', isAuthenticated: false });
+
       if (data.isCompleted) {
         router.push('/dashboard');
         return;
       }
+
       if (data.session?.current_step) {
         setCurrentStep(Math.max(0, data.session.current_step - 1));
       }
@@ -88,7 +92,7 @@ export default function OnboardingClient() {
     } finally {
       setIsLoading(false);
     }
-  }, [redirectToLogin, router, toast]);
+  }, [router, toast]);
 
   useEffect(() => {
     fetchSession();
@@ -104,16 +108,6 @@ export default function OnboardingClient() {
       });
       const payload = await res.json().catch(() => null);
 
-      if (res.status === 401) {
-        toast({
-          title: 'Sessão expirada',
-          description: 'Faça login novamente para continuar o onboarding.',
-          variant: 'destructive',
-        });
-        redirectToLogin();
-        return false;
-      }
-
       if (!res.ok) {
         const message = getErrorMessage(payload, 'Não foi possível salvar os dados.');
         console.error('Erro ao salvar passo:', { step, status: res.status, payload });
@@ -126,6 +120,9 @@ export default function OnboardingClient() {
       }
 
       setSession(payload.session);
+      if (payload.viewer) {
+        setViewer(payload.viewer);
+      }
       return true;
     } catch (error) {
       console.error('Erro ao salvar passo:', error);
@@ -139,7 +136,7 @@ export default function OnboardingClient() {
     } finally {
       setIsSaving(false);
     }
-  }, [redirectToLogin, toast]);
+  }, [toast]);
 
   const handleNext = async (data: Record<string, unknown>) => {
     const success = await saveStep(currentStep + 1, data);
@@ -155,7 +152,7 @@ export default function OnboardingClient() {
   };
 
   const handleComplete = async () => {
-    router.push('/dashboard');
+    await fetchSession();
   };
 
   if (isLoading) {
@@ -169,27 +166,27 @@ export default function OnboardingClient() {
     );
   }
 
-  const stepData: Record<number, Record<string, unknown>> = session ? {
-    1: session.step_1_data || {},
-    2: session.step_2_data || {},
-    3: session.step_3_data || {},
-    4: session.step_4_data || {},
-    5: session.step_5_data || {},
-  } : {
-    1: {},
-    2: {},
-    3: {},
-    4: {},
-    5: {},
-  };
+  const stepData: Record<number, Record<string, unknown>> = session
+    ? {
+        1: session.step_1_data || {},
+        2: session.step_2_data || {},
+        3: session.step_3_data || {},
+        4: session.step_4_data || {},
+        5: session.step_5_data || {},
+      }
+    : {
+        1: {},
+        2: {},
+        3: {},
+        4: {},
+        5: {},
+      };
 
   return (
     <div className="min-h-screen py-8 px-4">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">
-            Bem-vindo ao LicitaIA!
-          </h1>
+          <h1 className="text-3xl font-bold text-white mb-2">Bem-vindo ao LicitaIA!</h1>
           <p className="text-slate-400">
             Vamos configurar sua conta para encontrar as melhores licitações para você.
           </p>
@@ -210,8 +207,8 @@ export default function OnboardingClient() {
                         isActive
                           ? 'bg-indigo-600 text-white ring-4 ring-indigo-600/20'
                           : isCompleted
-                          ? 'bg-emerald-600 text-white'
-                          : 'bg-slate-700 text-slate-400'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-700 text-slate-400'
                       }`}
                     >
                       {isCompleted ? (
@@ -263,6 +260,7 @@ export default function OnboardingClient() {
                 onBack={handleBack}
                 isLoading={isSaving}
                 isFirstStep={true}
+                requiresAccountSetup={!viewer.isAuthenticated}
               />
             )}
             {currentStep === 1 && (
