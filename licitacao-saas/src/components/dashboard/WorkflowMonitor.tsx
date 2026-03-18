@@ -115,7 +115,8 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
     return `${Math.floor(diff / 60)}m ${diff % 60}s`;
   }
 
-  function renderMetrics(metrics: Record<string, number>) {
+  function renderMetrics(metrics: Record<string, number> | null | undefined) {
+    if (!metrics) return null;
     const entries = Object.entries(metrics).filter(([, v]) => v !== undefined && v !== null);
     if (entries.length === 0) return null;
     return (

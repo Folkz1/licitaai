@@ -134,6 +134,11 @@ export default function Step5Revisao({
       });
       
       if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.redirect && typeof window !== 'undefined') {
+          window.location.href = data.redirect;
+          return;
+        }
         onComplete();
       } else {
         const data = await res.json();
