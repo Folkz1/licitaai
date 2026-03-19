@@ -138,7 +138,7 @@ export async function POST(_request: NextRequest) {
       nome: MODALIDADES_PNCP[String(modalidade)] || "Desconhecida",
     }));
 
-    const context = buildOnboardingContext({
+    const buildCtx = buildOnboardingContext({
       step1,
       step2: {
         ...step2,
@@ -159,7 +159,7 @@ export async function POST(_request: NextRequest) {
     const openaiKey = process.env.OPENAI_API_KEY;
 
     if (!openrouterKey && !openaiKey) {
-      const templateConfig = generateTemplateConfig(context);
+      const templateConfig = generateTemplateConfig(buildCtx);
 
       await queryOne(
         `UPDATE onboarding_sessions
@@ -191,7 +191,7 @@ export async function POST(_request: NextRequest) {
     const result = streamText({
       model,
       system: SYSTEM_PROMPT,
-      prompt: `Analise os dados da empresa e gere configuracoes de busca e analise de licitacoes:\n\n${JSON.stringify(context, null, 2)}`,
+      prompt: `Analise os dados da empresa e gere configuracoes de busca e analise de licitacoes:\n\n${JSON.stringify(buildCtx, null, 2)}`,
       temperature: 0.7,
     });
 
@@ -210,7 +210,7 @@ export async function POST(_request: NextRequest) {
       );
     } catch (error) {
       console.error("[ONBOARDING_GEN] Erro ao parsear/salvar configuracao:", error);
-      config = generateTemplateConfig(context);
+      config = generateTemplateConfig(buildCtx);
     }
 
     const response = new Response(JSON.stringify(config), {
