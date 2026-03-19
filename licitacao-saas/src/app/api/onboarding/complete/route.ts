@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { randomBytes } from "crypto";
+import type { PoolClient } from "pg";
 import { pool, queryOne } from "@/lib/db";
 import { completeOnboardingSetup } from "@/lib/onboarding-completion";
 import {
@@ -39,7 +40,7 @@ function getTrialExpiryDate(baseDate = new Date()) {
   return new Date(baseDate.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
 }
 
-async function ensureTrialPlan(client: typeof pool extends { connect: () => Promise<infer T> } ? T : never) {
+async function ensureTrialPlan(client: PoolClient) {
   const existing = await client.query<{ id: string }>(
     "SELECT id FROM plans WHERE name = $1 LIMIT 1",
     [TRIAL_PLAN_NAME]
