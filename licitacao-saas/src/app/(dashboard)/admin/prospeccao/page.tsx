@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   UserPlus,
   Send,
@@ -16,6 +16,13 @@ import {
   Sparkles,
   RefreshCw,
   Search,
+  Upload,
+  Pickaxe,
+  FileSpreadsheet,
+  Loader2,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 interface Prospect {
@@ -69,7 +76,30 @@ interface TrialResult {
   error?: string;
 }
 
+interface MinedLead {
+  name: string;
+  phone: string;
+  address: string;
+  website: string;
+  selected: boolean;
+}
+
+interface CsvLead {
+  nome: string;
+  empresa: string;
+  segmento: string;
+  uf: string;
+  telefone: string;
+  email: string;
+}
+
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  fila: {
+    label: "Na fila",
+    color: "text-amber-400",
+    bg: "bg-amber-500/15",
+    border: "border-amber-500/20",
+  },
   enviado: {
     label: "Enviado",
     color: "text-slate-400",
@@ -119,6 +149,17 @@ const SEGMENTOS = [
   "Manutencao predial",
   "Educacao",
   "Outro",
+];
+
+const SEGMENTOS_MINERACAO = [
+  "papel e celulose",
+  "tecnologia",
+  "saude",
+  "construcao",
+  "alimentos",
+  "limpeza",
+  "seguranca",
+  "moveis",
 ];
 
 const UFS = [
@@ -171,6 +212,44 @@ function waLink(phone: string | null): string {
   return `https://wa.me/${cleaned}`;
 }
 
+function parseCsv(text: string): CsvLead[] {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+
+  const headerLine = lines[0].toLowerCase().trim();
+  const separator = headerLine.includes(";") ? ";" : ",";
+  const headers = headerLine.split(separator).map((h) => h.trim().replace(/^["']|["']$/g, ""));
+
+  const nameIdx = headers.findIndex((h) => h === "nome" || h === "name");
+  const empresaIdx = headers.findIndex((h) => h === "empresa" || h === "company");
+  const segmentoIdx = headers.findIndex((h) => h === "segmento" || h === "segment");
+  const ufIdx = headers.findIndex((h) => h === "uf" || h === "estado" || h === "state");
+  const telefoneIdx = headers.findIndex((h) => h === "telefone" || h === "phone" || h === "tel");
+  const emailIdx = headers.findIndex((h) => h === "email" || h === "e-mail");
+
+  const results: CsvLead[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+
+    const cols = line.split(separator).map((c) => c.trim().replace(/^["']|["']$/g, ""));
+
+    const nome = nameIdx >= 0 ? cols[nameIdx] || "" : "";
+    const empresa = empresaIdx >= 0 ? cols[empresaIdx] || "" : "";
+    const segmento = segmentoIdx >= 0 ? cols[segmentoIdx] || "" : "";
+    const uf = ufIdx >= 0 ? cols[ufIdx] || "" : "";
+    const telefone = telefoneIdx >= 0 ? cols[telefoneIdx] || "" : "";
+    const email = emailIdx >= 0 ? cols[emailIdx] || "" : "";
+
+    if (nome || empresa || email) {
+      results.push({ nome, empresa, segmento, uf, telefone, email });
+    }
+  }
+
+  return results;
+}
+
 export default function ProspeccaoPage() {
   const [data, setData] = useState<ProspeccaoData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -181,6 +260,24 @@ export default function ProspeccaoPage() {
   const [filterStatus, setFilterStatus] = useState<string>("todos");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Minerar Leads state
+  const [showMineSection, setShowMineSection] = useState(false);
+  const [mineSegmento, setMineSegmento] = useState("");
+  const [mineUf, setMineUf] = useState("");
+  const [mineCidade, setMineCidade] = useState("");
+  const [mineLoading, setMineLoading] = useState(false);
+  const [mineResults, setMineResults] = useState<MinedLead[] | null>(null);
+  const [mineError, setMineError] = useState<string | null>(null);
+  const [mineImporting, setMineImporting] = useState(false);
+
+  // CSV Import state
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [csvLeads, setCsvLeads] = useState<CsvLead[]>([]);
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvError, setCsvError] = useState<string | null>(null);
+  const [csvSuccess, setCsvSuccess] = useState<string | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     nome: "",
@@ -245,6 +342,170 @@ export default function ProspeccaoPage() {
     });
   }
 
+  // Minerar Leads handlers
+  async function handleMineSearch() {
+    if (!mineSegmento || !mineUf) return;
+    setMineLoading(true);
+    setMineError(null);
+    setMineResults(null);
+
+    try {
+      const params = new URLSearchParams({
+        segmento: mineSegmento,
+        uf: mineUf,
+      });
+      if (mineCidade.trim()) {
+        params.set("cidade", mineCidade.trim());
+      }
+
+      const res = await fetch(`/api/admin/prospeccao/minerar?${params.toString()}`);
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Erro ao buscar empresas");
+      }
+
+      const json = await res.json();
+      const leads = (json.results || []).map((r: Omit<MinedLead, "selected">) => ({
+        ...r,
+        selected: false,
+      }));
+      setMineResults(leads);
+    } catch (err) {
+      setMineError(
+        err instanceof Error
+          ? err.message
+          : "Erro ao buscar. Verifique se a chave do Google Maps esta configurada."
+      );
+    }
+    setMineLoading(false);
+  }
+
+  function toggleMineSelect(index: number) {
+    if (!mineResults) return;
+    const updated = [...mineResults];
+    updated[index] = { ...updated[index], selected: !updated[index].selected };
+    setMineResults(updated);
+  }
+
+  function toggleMineSelectAll() {
+    if (!mineResults) return;
+    const allSelected = mineResults.every((r) => r.selected);
+    setMineResults(mineResults.map((r) => ({ ...r, selected: !allSelected })));
+  }
+
+  async function handleMineImport() {
+    if (!mineResults) return;
+    const selected = mineResults.filter((r) => r.selected);
+    if (selected.length === 0) return;
+
+    setMineImporting(true);
+    try {
+      const leads = selected.map((r) => ({
+        nome: r.name,
+        empresa: r.name,
+        telefone: r.phone,
+        segmento: mineSegmento,
+        uf: mineUf,
+      }));
+
+      const res = await fetch("/api/admin/prospeccao/batch-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leads, autoSend: false }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Erro ao importar");
+      }
+
+      const json = await res.json();
+      setMineResults(null);
+      setMineError(null);
+      fetchData();
+      alert(`${json.imported || selected.length} leads adicionados a fila com sucesso!`);
+    } catch (err) {
+      setMineError(err instanceof Error ? err.message : "Erro ao importar leads");
+    }
+    setMineImporting(false);
+  }
+
+  const mineSelectedCount = mineResults?.filter((r) => r.selected).length || 0;
+
+  // CSV Import handlers
+  function handleCsvFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setCsvError(null);
+    setCsvSuccess(null);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      if (!text) {
+        setCsvError("Arquivo vazio");
+        return;
+      }
+
+      const leads = parseCsv(text);
+      if (leads.length === 0) {
+        setCsvError(
+          "Nenhum lead encontrado. Verifique se o CSV tem os headers: nome,empresa,segmento,uf,telefone,email"
+        );
+        return;
+      }
+
+      setCsvLeads(leads);
+      setShowCsvModal(true);
+    };
+    reader.onerror = () => {
+      setCsvError("Erro ao ler arquivo");
+    };
+    reader.readAsText(file, "utf-8");
+
+    // Reset input so the same file can be selected again
+    e.target.value = "";
+  }
+
+  async function handleCsvImport() {
+    if (csvLeads.length === 0) return;
+    setCsvImporting(true);
+    setCsvError(null);
+    setCsvSuccess(null);
+
+    try {
+      const res = await fetch("/api/admin/prospeccao/batch-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leads: csvLeads, autoSend: false }),
+      });
+
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || "Erro ao importar");
+      }
+
+      const json = await res.json();
+      setCsvSuccess(`${json.imported || csvLeads.length} leads importados para a fila!`);
+      setCsvLeads([]);
+      fetchData();
+      setTimeout(() => {
+        setShowCsvModal(false);
+        setCsvSuccess(null);
+      }, 2000);
+    } catch (err) {
+      setCsvError(err instanceof Error ? err.message : "Erro ao importar leads");
+    }
+    setCsvImporting(false);
+  }
+
+  // Compute fila count from data
+  const filaCount =
+    data?.prospects.filter(
+      (p) => p.prospect_status === "fila" || p.status === "fila"
+    ).length || 0;
+
   const filteredProspects = data?.prospects.filter((p) => {
     const matchSearch =
       !searchTerm ||
@@ -293,6 +554,23 @@ export default function ProspeccaoPage() {
             <RefreshCw className="h-4 w-4" />
             Atualizar
           </button>
+
+          {/* CSV Import button */}
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,.txt"
+            onChange={handleCsvFileChange}
+            className="hidden"
+          />
+          <button
+            onClick={() => csvInputRef.current?.click()}
+            className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800/50 px-3 py-2 text-sm text-slate-400 hover:text-white hover:border-slate-600 transition-all"
+          >
+            <Upload className="h-4 w-4" />
+            Importar CSV
+          </button>
+
           <button
             onClick={() => {
               setShowModal(true);
@@ -308,13 +586,20 @@ export default function ProspeccaoPage() {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-6">
         <StatCard
           label="Total enviados"
           value={stats.total}
           icon={<Send className="h-4 w-4" />}
           iconColor="text-slate-400"
           iconBg="bg-slate-500/10"
+        />
+        <StatCard
+          label="Na fila"
+          value={filaCount}
+          icon={<Clock className="h-4 w-4" />}
+          iconColor="text-amber-400"
+          iconBg="bg-amber-500/10"
         />
         <StatCard
           label="Acessaram"
@@ -347,6 +632,227 @@ export default function ProspeccaoPage() {
         />
       </div>
 
+      {/* Minerar Leads Section */}
+      <div className="rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-950/50 overflow-hidden">
+        <button
+          onClick={() => setShowMineSection(!showMineSection)}
+          className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-800/20 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15">
+              <Pickaxe className="h-4 w-4 text-amber-400" />
+            </div>
+            <div className="text-left">
+              <p className="text-sm font-semibold text-white">Minerar Leads</p>
+              <p className="text-[11px] text-slate-500">
+                Busque empresas no Google Maps por segmento e regiao
+              </p>
+            </div>
+          </div>
+          {showMineSection ? (
+            <ChevronUp className="h-4 w-4 text-slate-500" />
+          ) : (
+            <ChevronDown className="h-4 w-4 text-slate-500" />
+          )}
+        </button>
+
+        {showMineSection && (
+          <div className="border-t border-slate-800/60 px-5 py-5 space-y-5">
+            {/* Search form */}
+            <div className="flex items-end gap-4 flex-wrap">
+              <div className="w-48">
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Segmento *
+                </label>
+                <select
+                  value={mineSegmento}
+                  onChange={(e) => setMineSegmento(e.target.value)}
+                  className="w-full rounded-lg border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
+                >
+                  <option value="" className="bg-slate-950 text-slate-500">
+                    Selecione...
+                  </option>
+                  {SEGMENTOS_MINERACAO.map((s) => (
+                    <option key={s} value={s} className="bg-slate-950">
+                      {s.charAt(0).toUpperCase() + s.slice(1)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-28">
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  UF *
+                </label>
+                <select
+                  value={mineUf}
+                  onChange={(e) => setMineUf(e.target.value)}
+                  className="w-full rounded-lg border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-sm text-slate-300 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
+                >
+                  <option value="" className="bg-slate-950 text-slate-500">
+                    UF
+                  </option>
+                  {UFS.map((u) => (
+                    <option key={u} value={u} className="bg-slate-950">
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-44">
+                <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                  Cidade (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={mineCidade}
+                  onChange={(e) => setMineCidade(e.target.value)}
+                  placeholder="Ex: Campinas"
+                  className="w-full rounded-lg border border-slate-800/60 bg-slate-900/80 px-3 py-2 text-sm text-slate-300 placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/20"
+                />
+              </div>
+              <button
+                onClick={handleMineSearch}
+                disabled={!mineSegmento || !mineUf || mineLoading}
+                className="flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-amber-500/20"
+              >
+                {mineLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+                Buscar empresas
+              </button>
+            </div>
+
+            {/* Loading state */}
+            {mineLoading && (
+              <div className="flex items-center justify-center py-10">
+                <div className="flex flex-col items-center gap-3">
+                  <Loader2 className="h-8 w-8 text-amber-400 animate-spin" />
+                  <p className="text-sm text-slate-500">
+                    Buscando empresas no Google Maps...
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Error state */}
+            {mineError && !mineLoading && (
+              <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-950/20 px-4 py-3">
+                <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+                <p className="text-sm text-red-300">{mineError}</p>
+              </div>
+            )}
+
+            {/* No results state */}
+            {mineResults && mineResults.length === 0 && !mineLoading && (
+              <div className="flex flex-col items-center justify-center py-10">
+                <Search className="h-8 w-8 text-slate-600 mb-3" />
+                <p className="text-sm text-slate-500">
+                  Nenhuma empresa encontrada. Tente outro segmento ou cidade.
+                </p>
+              </div>
+            )}
+
+            {/* Results table */}
+            {mineResults && mineResults.length > 0 && !mineLoading && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-slate-400">
+                    {mineResults.length} empresa{mineResults.length > 1 ? "s" : ""} encontrada{mineResults.length > 1 ? "s" : ""}
+                  </p>
+                  {mineSelectedCount > 0 && (
+                    <button
+                      onClick={handleMineImport}
+                      disabled={mineImporting}
+                      className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      {mineImporting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <UserPlus className="h-4 w-4" />
+                      )}
+                      Adicionar {mineSelectedCount} selecionado{mineSelectedCount > 1 ? "s" : ""} a fila
+                    </button>
+                  )}
+                </div>
+
+                <div className="overflow-x-auto rounded-lg border border-slate-800/40">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-800/60 bg-slate-900/50">
+                        <th className="px-3 py-2.5 text-left">
+                          <input
+                            type="checkbox"
+                            checked={mineResults.length > 0 && mineResults.every((r) => r.selected)}
+                            onChange={toggleMineSelectAll}
+                            className="rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/20 focus:ring-offset-0"
+                          />
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                          Empresa
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                          Telefone
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                          Endereco
+                        </th>
+                        <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                          Website
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/40">
+                      {mineResults.map((lead, idx) => (
+                        <tr
+                          key={idx}
+                          className={`transition-colors ${
+                            lead.selected ? "bg-indigo-950/20" : "hover:bg-slate-800/20"
+                          }`}
+                        >
+                          <td className="px-3 py-2.5">
+                            <input
+                              type="checkbox"
+                              checked={lead.selected}
+                              onChange={() => toggleMineSelect(idx)}
+                              className="rounded border-slate-600 bg-slate-800 text-indigo-500 focus:ring-indigo-500/20 focus:ring-offset-0"
+                            />
+                          </td>
+                          <td className="px-3 py-2.5 text-sm text-slate-200 max-w-[200px] truncate">
+                            {lead.name}
+                          </td>
+                          <td className="px-3 py-2.5 text-sm text-slate-400">
+                            {lead.phone || "-"}
+                          </td>
+                          <td className="px-3 py-2.5 text-xs text-slate-500 max-w-[250px] truncate">
+                            {lead.address || "-"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            {lead.website ? (
+                              <a
+                                href={lead.website.startsWith("http") ? lead.website : `https://${lead.website}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-indigo-400 hover:text-indigo-300 truncate max-w-[160px] inline-block"
+                              >
+                                {lead.website}
+                              </a>
+                            ) : (
+                              <span className="text-xs text-slate-600">-</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Filters */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="relative flex-1 max-w-sm">
@@ -360,7 +866,7 @@ export default function ProspeccaoPage() {
           />
         </div>
         <div className="flex items-center gap-2">
-          {["todos", "enviado", "acessou", "ativo", "expirado", "convertido"].map((status) => (
+          {["todos", "fila", "enviado", "acessou", "ativo", "expirado", "convertido"].map((status) => (
             <button
               key={status}
               onClick={() => setFilterStatus(status)}
@@ -791,6 +1297,144 @@ export default function ProspeccaoPage() {
                 </form>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: CSV Import Preview */}
+      {showCsvModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="relative w-full max-w-3xl mx-4 rounded-2xl border border-slate-800/60 bg-slate-950 shadow-2xl shadow-black/40 max-h-[80vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-800/60 px-6 py-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15">
+                  <FileSpreadsheet className="h-4 w-4 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">Importar CSV</h2>
+                  <p className="text-[11px] text-slate-500">
+                    {csvLeads.length} lead{csvLeads.length > 1 ? "s" : ""} encontrado{csvLeads.length > 1 ? "s" : ""} no arquivo
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowCsvModal(false);
+                  setCsvLeads([]);
+                  setCsvError(null);
+                  setCsvSuccess(null);
+                }}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-5 overflow-auto flex-1">
+              {csvError && (
+                <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-950/20 px-3 py-2 mb-4">
+                  <XCircle className="h-4 w-4 text-red-400 shrink-0" />
+                  <p className="text-xs text-red-300">{csvError}</p>
+                </div>
+              )}
+
+              {csvSuccess && (
+                <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 mb-4">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                  <p className="text-xs text-emerald-300">{csvSuccess}</p>
+                </div>
+              )}
+
+              {csvLeads.length > 0 && !csvSuccess && (
+                <div className="space-y-4">
+                  <div className="overflow-x-auto rounded-lg border border-slate-800/40">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-800/60 bg-slate-900/50">
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            Nome
+                          </th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            Empresa
+                          </th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            Segmento
+                          </th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            UF
+                          </th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            Telefone
+                          </th>
+                          <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                            Email
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/40">
+                        {csvLeads.slice(0, 50).map((lead, idx) => (
+                          <tr key={idx} className="hover:bg-slate-800/20 transition-colors">
+                            <td className="px-3 py-2 text-sm text-slate-300 max-w-[120px] truncate">
+                              {lead.nome || "-"}
+                            </td>
+                            <td className="px-3 py-2 text-sm text-slate-300 max-w-[140px] truncate">
+                              {lead.empresa || "-"}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-400 max-w-[100px] truncate">
+                              {lead.segmento || "-"}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-400">
+                              {lead.uf || "-"}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-400">
+                              {lead.telefone || "-"}
+                            </td>
+                            <td className="px-3 py-2 text-xs text-slate-400 max-w-[160px] truncate">
+                              {lead.email || "-"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  {csvLeads.length > 50 && (
+                    <p className="text-xs text-slate-500 text-center">
+                      Mostrando 50 de {csvLeads.length} leads
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {csvLeads.length > 0 && !csvSuccess && (
+              <div className="border-t border-slate-800/60 px-6 py-4 shrink-0 flex items-center justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setShowCsvModal(false);
+                    setCsvLeads([]);
+                    setCsvError(null);
+                  }}
+                  className="rounded-lg border border-slate-700 bg-slate-800/50 px-4 py-2 text-sm text-slate-400 hover:text-white hover:border-slate-600 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleCsvImport}
+                  disabled={csvImporting}
+                  className="flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-indigo-500/20"
+                >
+                  {csvImporting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
+                  Importar {csvLeads.length} lead{csvLeads.length > 1 ? "s" : ""} para fila
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -50,6 +50,10 @@ export async function register() {
   // Prospect status updates (trial tracking) - every 6 hours
   setInterval(() => callCron("/api/cron/prospect-status"), 6 * 60 * 60 * 1000);
 
+  // Prospect send (batch queue -> trial invites) - every 1 hour
+  // The endpoint itself checks daily quota (max 10/day) so safe to call hourly
+  setInterval(() => callCron("/api/cron/prospect-send"), 60 * 60 * 1000);
+
   // Scrape PNCP (daily portal sync) - every 24 hours
   setInterval(
     () => callCron("/api/cron/scrape-pncp", "GET"),
@@ -66,6 +70,7 @@ export async function register() {
   console.log("  - /api/cron/nurturing       -> every 10 min");
   console.log("  - /api/cron/lead-alerts     -> every 6 hours");
   console.log("  - /api/cron/prospect-status -> every 6 hours");
+  console.log("  - /api/cron/prospect-send   -> every 1 hour (quota: 10/day)");
   console.log("  - /api/cron/blog-generate   -> every 12 hours");
   console.log("  - /api/cron/scrape-pncp     -> every 24 hours");
 }
