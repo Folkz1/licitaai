@@ -1,7 +1,7 @@
 import { query } from "@/lib/db";
 import { APP_URL } from "@/lib/portal";
 import { COMMERCIAL_MESSAGES } from "@/lib/commercial";
-import { Check, ArrowRight } from "lucide-react";
+import { Check, ArrowRight, Zap } from "lucide-react";
 import { Metadata } from "next";
 import Link from "next/link";
 
@@ -20,48 +20,48 @@ interface PlanRow {
 
 const FAQ_ITEMS = [
   {
-    question: "O que e o LicitaIA?",
+    question: "O que é o LicitaIA?",
     answer:
-      "E uma plataforma que monitora licitacoes publicas do PNCP, organiza oportunidades por perfil e aplica IA para priorizar o que merece atencao comercial.",
+      "É uma plataforma que monitora licitações públicas do PNCP, organiza oportunidades por perfil e aplica IA para priorizar o que merece atenção comercial.",
   },
   {
-    question: "Como funciona a analise por IA?",
+    question: "Como funciona a análise por IA?",
     answer:
-      "A IA le o edital, extrai sinais de relevancia, riscos, documentos e prazos para reduzir triagem manual e acelerar a decisao da equipe.",
+      "A IA lê o edital, extrai sinais de relevância, riscos, documentos e prazos para reduzir triagem manual e acelerar a decisão da equipe.",
   },
   {
     question: "Posso cancelar quando quiser?",
     answer:
-      "Sim. O cancelamento e simples e a assinatura segue ativa ate o fim do ciclo ja pago.",
+      "Sim. O cancelamento é simples e a assinatura segue ativa até o fim do ciclo já pago.",
   },
   {
-    question: "Preciso de cartao para comecar?",
+    question: "Preciso de cartão para começar?",
     answer:
-      "Nao necessariamente. O time comercial pode habilitar a melhor forma de ativacao para sua operacao.",
+      "Não. Você pode começar o teste grátis de 7 dias sem cartão de crédito. Configure seu perfil e a IA começa a trabalhar imediatamente.",
   },
   {
-    question: "Tem teste gratis?",
+    question: "Tem teste grátis?",
     answer:
-      "Sim. O time comercial pode liberar um trial assistido de 7 dias com limite operacional para validar aderencia antes de contratar.",
+      "Sim. São 7 dias de trial com até 5 análises por dia. Basta fazer o cadastro e configurar seu perfil de busca.",
   },
   {
-    question: "Quantos usuarios posso adicionar?",
+    question: "Quantos usuários posso adicionar?",
     answer:
-      "Depende do plano contratado. Os limites de usuarios ficam explicitos na tabela comparativa abaixo.",
+      "Depende do plano contratado. Os limites de usuários ficam explícitos na tabela comparativa abaixo.",
   },
 ];
 
 export const metadata: Metadata = {
-  title: "Planos e Precos - LicitaIA",
+  title: "Planos e Preços - LicitaIA",
   description:
-    "Compare os planos do LicitaIA para monitorar, buscar e analisar licitacoes com inteligencia artificial.",
+    "Compare os planos do LicitaIA para monitorar, buscar e analisar licitações com inteligência artificial. Teste grátis 7 dias.",
   alternates: {
     canonical: `${APP_URL}/precos`,
   },
   openGraph: {
-    title: "Planos e Precos - LicitaIA",
+    title: "Planos e Preços - LicitaIA",
     description:
-      "Starter, Pro e Enterprise para equipes que precisam captar licitacoes com mais velocidade.",
+      "Starter, Pro e Enterprise para equipes que precisam captar licitações com mais velocidade. Teste grátis.",
     type: "website",
     url: `${APP_URL}/precos`,
   },
@@ -125,13 +125,13 @@ export default async function PrecosPage() {
 
   const comparisonRows = [
     {
-      label: "Licitacoes por mes",
+      label: "Licitações por mês",
       values: plans.map((plan) =>
         formatLimit(plan.max_licitacoes_per_month, "Ilimitado")
       ),
     },
     {
-      label: "Usuarios",
+      label: "Usuários",
       values: plans.map((plan) => plan.max_users.toLocaleString("pt-BR")),
     },
     {
@@ -141,17 +141,17 @@ export default async function PrecosPage() {
       ),
     },
     {
-      label: "Analise por IA",
-      values: plans.map(() => "Incluida"),
+      label: "Análise por IA",
+      values: plans.map(() => "Incluída"),
     },
     {
       label: "Pipeline e kanban",
-      values: plans.map(() => "Incluido"),
+      values: plans.map(() => "Incluído"),
     },
     {
-      label: "Suporte prioritario",
+      label: "Suporte prioritário",
       values: plans.map((plan) =>
-        plan.name === "enterprise" ? "Incluido" : "Sob demanda"
+        plan.name === "enterprise" ? "Incluído" : "Sob demanda"
       ),
     },
   ];
@@ -176,28 +176,29 @@ export default async function PrecosPage() {
                 Planos LicitaIA
               </p>
               <h1 className="text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                Escolha o plano para captar licitacoes com ritmo diario.
+                Escolha o plano para captar licitações com ritmo diário.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg">
                 Starter, Pro e Enterprise para equipes que precisam buscar, filtrar,
                 analisar e transformar oportunidades do PNCP em pipeline comercial.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
+                <Link
+                  href="/onboarding"
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+                >
+                  <Zap className="h-4 w-4" />
+                  Testar grátis 7 dias
+                </Link>
                 <a
                   href={COMMERCIAL_MESSAGES.pricing}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-400"
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
                 >
                   Falar no WhatsApp
                   <ArrowRight className="h-4 w-4" />
                 </a>
-                <Link
-                  href="/editais"
-                  className="inline-flex items-center rounded-xl border border-slate-700 px-5 py-3 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:text-white"
-                >
-                  Ver portal publico
-                </Link>
               </div>
             </div>
           </div>
@@ -237,24 +238,23 @@ export default async function PrecosPage() {
                   </div>
 
                   <div className="mt-8 space-y-4 text-sm text-slate-300">
-                    <Feature text={`${formatLimit(plan.max_licitacoes_per_month, "Ilimitadas")} licitacoes por mes`} />
-                    <Feature text={`${plan.max_users.toLocaleString("pt-BR")} usuarios`} />
+                    <Feature text={`${formatLimit(plan.max_licitacoes_per_month, "Ilimitadas")} licitações por mês`} />
+                    <Feature text={`${plan.max_users.toLocaleString("pt-BR")} usuários`} />
                     <Feature text={`${formatLimit(plan.max_searches_per_day, "Ilimitadas")} buscas por dia`} />
-                    <Feature text="Analises com IA e priorizacao de oportunidades" />
-                    <Feature text="Portal publico e flywheel de inteligencia" />
+                    <Feature text="Análises com IA e priorização de oportunidades" />
+                    <Feature text="Alertas automáticos por WhatsApp" />
                   </div>
 
                   <Link
-                    href={COMMERCIAL_MESSAGES.pricing}
-                    className={`mt-8 inline-flex w-full items-center justify-center rounded-2xl px-4 py-3 text-sm font-semibold transition ${
+                    href="/onboarding"
+                    className={`mt-8 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition ${
                       isFeatured
                         ? "bg-emerald-500 text-slate-950 hover:bg-emerald-400"
                         : "border border-slate-700 text-slate-100 hover:border-slate-500"
                     }`}
-                    target="_blank"
-                    rel="noopener noreferrer"
                   >
-                    Agendar diagnostico
+                    <Zap className="h-4 w-4" />
+                    Começar teste grátis
                   </Link>
                 </article>
               );

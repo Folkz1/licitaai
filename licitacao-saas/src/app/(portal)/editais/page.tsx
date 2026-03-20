@@ -401,6 +401,32 @@ export default async function EditaisListPage({ searchParams }: Props) {
             </div>
           )}
         </form>
+
+        {/* Popular searches - ajuda SEO e UX */}
+        {!sp.q && !sp.uf && (
+          <div className="mt-4 flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-500">Buscas populares:</span>
+            {[
+              { q: "papel", label: "Papel e celulose" },
+              { q: "tecnologia da informacao", label: "TI" },
+              { q: "material hospitalar", label: "Saúde" },
+              { q: "construcao civil", label: "Construção" },
+              { q: "alimentos", label: "Alimentos" },
+              { q: "veiculos", label: "Veículos" },
+              { q: "mobiliario", label: "Mobiliário" },
+              { q: "limpeza", label: "Limpeza" },
+              { q: "seguranca", label: "Segurança" },
+            ].map((item) => (
+              <Link
+                key={item.q}
+                href={`/editais?q=${encodeURIComponent(item.q)}`}
+                className="rounded-full border border-slate-700/60 px-3 py-1 text-xs text-slate-400 transition-colors hover:border-indigo-500/50 hover:text-white"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Results */}

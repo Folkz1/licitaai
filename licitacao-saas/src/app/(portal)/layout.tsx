@@ -1,8 +1,7 @@
 import Link from "next/link";
-import { FileText, Search, LogIn } from "lucide-react";
+import { FileText, Search, LogIn, Zap } from "lucide-react";
 import TrackPageView from "@/components/TrackPageView";
 import { Suspense } from "react";
-import { COMMERCIAL_MESSAGES } from "@/lib/commercial";
 
 export default function PortalLayout({
   children,
@@ -55,15 +54,22 @@ export default function PortalLayout({
             </Link>
           </nav>
 
-          <a
-            href={COMMERCIAL_MESSAGES.home}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 transition-colors hover:bg-emerald-400"
-          >
-            <LogIn className="h-4 w-4" />
-            Agendar diagnostico
-          </a>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="text-sm text-slate-400 hover:text-white transition-colors hidden sm:inline-flex items-center gap-1.5"
+            >
+              <LogIn className="h-4 w-4" />
+              Entrar
+            </Link>
+            <Link
+              href="/onboarding"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950 transition-colors hover:bg-emerald-400"
+            >
+              <Zap className="h-4 w-4" />
+              Testar grátis
+            </Link>
+          </div>
         </div>
       </header>
 
