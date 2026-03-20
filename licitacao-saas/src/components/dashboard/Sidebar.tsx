@@ -15,6 +15,7 @@ import {
   ChevronRight,
   Key,
   BarChart2,
+  UserPlus,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -35,6 +36,7 @@ const navItems = [
 const adminItems = [
   { href: "/admin/analytics", label: "Analytics", icon: BarChart2 },
   { href: "/admin/vendas", label: "Vendas", icon: DollarSign },
+  { href: "/admin/prospeccao", label: "Prospecção", icon: UserPlus },
   { href: "/admin/tenants", label: "Tenants", icon: Building2 },
   { href: "/admin/users", label: "Usuarios", icon: Users },
   { href: "/admin/custos", label: "Custos LLM", icon: DollarSign },

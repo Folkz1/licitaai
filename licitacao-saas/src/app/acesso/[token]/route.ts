@@ -100,6 +100,18 @@ export async function GET(
     [accessToken.id]
   ).catch(() => {});
 
+  // Track prospect access in portal_leads
+  await query(
+    `UPDATE portal_leads
+     SET prospect_status = CASE WHEN prospect_status = 'enviado' THEN 'acessou' ELSE prospect_status END,
+         first_access_at = COALESCE(first_access_at, NOW()),
+         last_access_at = NOW(),
+         access_count = COALESCE(access_count, 0) + 1,
+         updated_at = NOW()
+     WHERE user_id = $1`,
+    [accessToken.user_id]
+  ).catch(() => {});
+
   const redirectPath = accessToken.onboarding_completed ? "/dashboard" : "/onboarding";
   const response = NextResponse.redirect(new URL(redirectPath, appUrl));
 
