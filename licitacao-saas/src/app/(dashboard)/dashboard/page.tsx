@@ -219,10 +219,12 @@ export default function DashboardPage() {
       )}
 
       {/* Workflow Monitor - Trigger buttons + live progress */}
-      <WorkflowMonitor
-        onBuscaComplete={fetchStats}
-        onAnaliseComplete={fetchStats}
-      />
+      <div data-tour="workflow-monitor">
+        <WorkflowMonitor
+          onBuscaComplete={fetchStats}
+          onAnaliseComplete={fetchStats}
+        />
+      </div>
 
       {/* Today's Activity Summary */}
       {stats.todayActivity && (
@@ -298,7 +300,7 @@ export default function DashboardPage() {
       )}
 
       {/* KPI Cards - Row 1: Big numbers */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div data-tour="kpi-cards" className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <KpiCard
           title="Total Captadas"
           value={totalNum.toString()}
@@ -340,7 +342,7 @@ export default function DashboardPage() {
       {/* Row 2: Phase Pipeline + Urgent */}
       <div className="grid gap-4 lg:grid-cols-5">
         {/* Phase Pipeline - Takes 3 cols */}
-        <div className="lg:col-span-3 rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-950/50 p-5">
+        <div data-tour="pipeline-overview" className="lg:col-span-3 rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-950/50 p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4 text-slate-400" />
