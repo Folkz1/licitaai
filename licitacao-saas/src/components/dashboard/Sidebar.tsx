@@ -11,12 +11,12 @@ import {
   Users,
   Building2,
   DollarSign,
-  Sparkles,
   ChevronRight,
   Key,
   BarChart2,
   UserPlus,
 } from "lucide-react";
+import { Logo } from "@/components/brand/Logo";
 
 interface SidebarProps {
   user: {
@@ -49,14 +49,11 @@ export function Sidebar({ user }: SidebarProps) {
   return (
     <aside className="flex w-64 flex-col border-r border-slate-800/60 bg-gradient-to-b from-slate-900/95 to-slate-950/95">
       {/* Brand */}
-      <div className="flex h-16 items-center gap-3 border-b border-slate-800/60 px-6">
-        <div className="relative flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/20">
-          <Sparkles className="h-4 w-4 text-white" />
-          <div className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-emerald-400 border-2 border-slate-900" />
-        </div>
-        <div>
-          <p className="text-sm font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">LicitaIA</p>
-          <p className="text-[10px] text-slate-500 tracking-wider uppercase">{user.tenantName}</p>
+      <div className="flex h-16 items-center border-b border-slate-800/60 px-5">
+        <div className="flex items-center gap-2.5">
+          <Logo size="sm" />
+          <div className="h-4 w-px bg-slate-700/60" />
+          <p className="text-[10px] text-slate-500 tracking-wider uppercase truncate max-w-[100px]">{user.tenantName}</p>
         </div>
       </div>
 

@@ -58,8 +58,8 @@ async function getSegmento(slug: string): Promise<Segmento | null> {
 }
 
 function buildKeywordFilter(): string {
-  // Use full-text search (uses GIN index, 100x faster than ILIKE)
-  return `to_tsvector('portuguese', COALESCE(l.objeto_compra, '')) @@ to_tsquery('portuguese', array_to_string(s.keywords, ' | '))`;
+  // Use ANY + ILIKE with first keyword only (fast enough with cache, avoids tsquery parse errors)
+  return `l.objeto_compra ILIKE ANY(SELECT '%' || kw || '%' FROM unnest(s.keywords) kw LIMIT 5)`;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

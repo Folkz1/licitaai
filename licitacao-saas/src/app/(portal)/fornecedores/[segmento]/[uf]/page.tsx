@@ -48,7 +48,7 @@ interface Props {
 }
 
 function buildKeywordFilter(): string {
-  return `to_tsvector('portuguese', COALESCE(l.objeto_compra, '')) @@ to_tsquery('portuguese', array_to_string(s.keywords, ' | '))`;
+  return `l.objeto_compra ILIKE ANY(SELECT '%' || kw || '%' FROM unnest(s.keywords) kw LIMIT 5)`;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

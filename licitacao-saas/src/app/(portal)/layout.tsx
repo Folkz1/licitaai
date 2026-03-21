@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { FileText, Search, LogIn, Zap, Layers } from "lucide-react";
+import { Search, LogIn, Zap, Layers } from "lucide-react";
 import TrackPageView from "@/components/TrackPageView";
 import { Suspense } from "react";
+import { Logo, LogoIcon } from "@/components/brand/Logo";
 
 export default function PortalLayout({
   children,
@@ -17,13 +18,8 @@ export default function PortalLayout({
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/80 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600">
-              <FileText className="h-5 w-5 text-white" />
-            </div>
-            <span className="text-xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
-              LicitaIA
-            </span>
+          <Link href="/">
+            <Logo size="md" />
           </Link>
 
           <nav className="hidden sm:flex items-center gap-6">
@@ -88,11 +84,8 @@ export default function PortalLayout({
         <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
           <div className="grid gap-8 sm:grid-cols-3">
             <div>
-              <div className="flex items-center gap-2 mb-3">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600">
-                  <FileText className="h-4 w-4 text-white" />
-                </div>
-                <span className="font-bold text-white">LicitaIA</span>
+              <div className="mb-3">
+                <Logo size="sm" />
               </div>
               <p className="text-sm text-slate-500 leading-relaxed">
                 Plataforma de busca e análise inteligente de licitações públicas com IA.
