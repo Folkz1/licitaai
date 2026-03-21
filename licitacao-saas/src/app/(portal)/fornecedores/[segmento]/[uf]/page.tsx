@@ -48,7 +48,7 @@ interface Props {
 }
 
 function buildKeywordFilter(): string {
-  return `l.objeto_compra ILIKE ANY(SELECT '%' || kw || '%' FROM unnest(s.keywords) kw LIMIT 5)`;
+  return `l.objeto_compra ILIKE '%' || s.keywords[1] || '%'`;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {

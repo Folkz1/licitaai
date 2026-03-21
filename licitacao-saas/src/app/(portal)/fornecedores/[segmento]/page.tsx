@@ -58,8 +58,8 @@ async function getSegmento(slug: string): Promise<Segmento | null> {
 }
 
 function buildKeywordFilter(): string {
-  // Use ANY + ILIKE with first keyword only (fast enough with cache, avoids tsquery parse errors)
-  return `l.objeto_compra ILIKE ANY(SELECT '%' || kw || '%' FROM unnest(s.keywords) kw LIMIT 5)`;
+  // Use first keyword only (indexed via tsvector, fast)
+  return `l.objeto_compra ILIKE '%' || s.keywords[1] || '%'`;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
