@@ -21,6 +21,7 @@ export function middleware(req: NextRequest) {
     pathname === "/" ||
     pathname.startsWith("/editais") ||
     pathname.startsWith("/blog") ||
+    pathname.startsWith("/fornecedores") ||
     pathname.startsWith("/precos") ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/acesso") ||
