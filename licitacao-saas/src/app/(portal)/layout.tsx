@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, Search, LogIn, Zap } from "lucide-react";
+import { FileText, Search, LogIn, Zap, Layers } from "lucide-react";
 import TrackPageView from "@/components/TrackPageView";
 import { Suspense } from "react";
 
@@ -39,6 +39,13 @@ export default function PortalLayout({
               className="text-sm text-slate-400 hover:text-white transition-colors"
             >
               Blog
+            </Link>
+            <Link
+              href="/fornecedores"
+              className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+            >
+              <Layers className="h-4 w-4" />
+              Fornecedores
             </Link>
             <Link
               href="/guia/como-participar-de-licitacoes"
@@ -98,6 +105,11 @@ export default function PortalLayout({
                 <li>
                   <Link href="/editais" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
                     Buscar Editais
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/fornecedores" className="text-sm text-slate-500 hover:text-slate-300 transition-colors">
+                    Fornecedores
                   </Link>
                 </li>
                 <li>

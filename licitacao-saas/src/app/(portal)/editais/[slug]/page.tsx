@@ -241,23 +241,24 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
     [licitacao.numero_controle_pncp]
   );
 
-  // Related licitações
+  // Related licitações (same UF, for internal cross-linking / SEO)
   const relacionadas = await query<{
     slug: string;
     objeto_compra: string;
     orgao_nome: string;
     valor_total_estimado: number;
     uf: string;
+    data_publicacao: string;
   }>(
-    `SELECT slug, objeto_compra, orgao_nome, valor_total_estimado, uf
+    `SELECT slug, objeto_compra, orgao_nome, valor_total_estimado, uf, data_publicacao
      FROM licitacoes
      WHERE tenant_id = $1
        AND slug IS NOT NULL
-       AND id != $2
-       AND (uf = $3 OR orgao_nome = $4)
+       AND slug != $2
+       AND uf = $3
      ORDER BY data_publicacao DESC NULLS LAST
-     LIMIT 5`,
-    [PORTAL_PUBLIC_TENANT_ID, licitacao.id, licitacao.uf, licitacao.orgao_nome]
+     LIMIT 6`,
+    [PORTAL_PUBLIC_TENANT_ID, licitacao.slug, licitacao.uf]
   );
 
   const prioridadeColors: Record<string, string> = {
@@ -596,12 +597,12 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
             {/* Lead Capture Form */}
             <LeadCaptureForm sourceSlug={licitacao.slug} />
 
-            {/* Related */}
+            {/* Quick links sidebar */}
             {relacionadas.length > 0 && (
               <div className="rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-950/50 p-5">
-                <h3 className="text-sm font-semibold text-slate-300 mb-4">Editais Relacionados</h3>
+                <h3 className="text-sm font-semibold text-slate-300 mb-4">Mais em {licitacao.uf || "Brasil"}</h3>
                 <div className="space-y-3">
-                  {relacionadas.map((rel) => (
+                  {relacionadas.slice(0, 4).map((rel) => (
                     <Link
                       key={rel.slug}
                       href={`/editais/${rel.slug}`}
@@ -619,10 +620,88 @@ export default async function EditalDetalhe({ params, searchParams }: Props) {
                     </Link>
                   ))}
                 </div>
+                {licitacao.uf && (
+                  <Link
+                    href={`/editais?uf=${licitacao.uf}`}
+                    className="mt-4 inline-flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+                  >
+                    Ver todos em {licitacao.uf} <ArrowRight className="h-3 w-3" />
+                  </Link>
+                )}
               </div>
             )}
           </div>
         </div>
+
+        {/* Related Licitações - full-width card grid for internal cross-linking */}
+        {relacionadas.length > 0 && (
+          <section className="mt-12">
+            <h2 className="text-lg font-bold text-white mb-6">
+              Licitações relacionadas em {licitacao.uf || "Brasil"}
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {relacionadas.map((rel) => (
+                <Link
+                  key={rel.slug}
+                  href={`/editais/${rel.slug}`}
+                  className="group rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-950/50 p-5 hover:border-indigo-500/30 hover:shadow-lg hover:shadow-indigo-500/5 transition-all"
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    {rel.uf && (
+                      <Badge variant="outline" className="text-xs border-slate-700 text-slate-400 shrink-0">
+                        {rel.uf}
+                      </Badge>
+                    )}
+                    {rel.data_publicacao && (
+                      <span className="text-xs text-slate-600">
+                        {new Date(rel.data_publicacao).toLocaleDateString("pt-BR")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-300 line-clamp-2 group-hover:text-white transition-colors mb-3">
+                    {rel.objeto_compra}
+                  </p>
+                  <p className="text-xs text-slate-600 truncate mb-2">
+                    {rel.orgao_nome}
+                  </p>
+                  <p className="text-sm font-semibold text-emerald-400">
+                    {rel.valor_total_estimado ? formatCurrency(rel.valor_total_estimado) : "Valor não informado"}
+                  </p>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Explore more - navigation links for SEO crawlability */}
+        <section className="mt-10 rounded-xl border border-slate-800/60 bg-gradient-to-br from-slate-900/80 to-slate-950/50 p-6">
+          <h2 className="text-sm font-semibold text-slate-300 mb-4">Explore mais</h2>
+          <div className="flex flex-wrap gap-3">
+            {licitacao.uf && (
+              <Link
+                href={`/editais?uf=${licitacao.uf}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/60 px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:border-indigo-500/50 transition-colors"
+              >
+                <MapPin className="h-4 w-4 text-indigo-400" />
+                Ver mais licitações em {licitacao.uf}
+              </Link>
+            )}
+            <Link
+              href="/editais"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/60 px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:border-indigo-500/50 transition-colors"
+            >
+              <FileText className="h-4 w-4 text-indigo-400" />
+              Todos os editais
+            </Link>
+            <Link
+              href="/blog"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/60 px-4 py-2.5 text-sm text-slate-400 hover:text-white hover:border-indigo-500/50 transition-colors"
+            >
+              <Sparkles className="h-4 w-4 text-indigo-400" />
+              Guias sobre licitações
+            </Link>
+          </div>
+        </section>
       </div>
     </>
   );
