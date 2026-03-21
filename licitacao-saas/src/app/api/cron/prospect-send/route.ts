@@ -13,6 +13,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Only send Monday-Friday during business hours (9h-17h BRT = 12h-20h UTC)
+    const now = new Date();
+    const brtHour = (now.getUTCHours() - 3 + 24) % 24;
+    const dayOfWeek = new Date(now.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" })).getDay();
+
+    if (dayOfWeek === 0 || dayOfWeek === 6) {
+      return NextResponse.json({ ok: true, message: "Fim de semana. Envios apenas seg-sex.", sent: 0, skipped: true });
+    }
+
+    if (brtHour < 9 || brtHour >= 17) {
+      return NextResponse.json({ ok: true, message: `Fora do horário comercial (${brtHour}h BRT). Envios das 9h às 17h.`, sent: 0, skipped: true });
+    }
+
     // Check how many were already sent today (prospect_status changed to 'enviado' today)
     const sentToday = await queryOne<{ count: string }>(
       `SELECT COUNT(*)::text AS count FROM portal_leads
