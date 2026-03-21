@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 3600; // Cache 1 hour
 
 export const metadata: Metadata = {
   title: "Licitações por Segmento de Atuação | LicitaIA",

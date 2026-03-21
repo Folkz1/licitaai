@@ -17,6 +17,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 export const dynamic = "force-dynamic";
+export const revalidate = 3600;
 
 interface Segmento {
   id: number;
@@ -47,7 +48,7 @@ interface Props {
 }
 
 function buildKeywordFilter(): string {
-  return `EXISTS (SELECT 1 FROM unnest(s.keywords) kw WHERE l.objeto_compra ILIKE '%' || kw || '%')`;
+  return `to_tsvector('portuguese', COALESCE(l.objeto_compra, '')) @@ to_tsquery('portuguese', array_to_string(s.keywords, ' | '))`;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
