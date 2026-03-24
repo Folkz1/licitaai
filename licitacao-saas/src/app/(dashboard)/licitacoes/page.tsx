@@ -233,6 +233,7 @@ export default function LicitacoesPage() {
     sortBy: searchParams.get("sort_by") || "deadline",
     period: searchParams.get("period") || "",
     analyzed: searchParams.get("analyzed") || "",
+    onlyRelevant: searchParams.get("only_relevant") !== "false",
   });
   const [pageSize, setPageSize] = useState(
     parseInt(searchParams.get("limit") || String(DEFAULT_PAGE_SIZE))
@@ -254,6 +255,7 @@ export default function LicitacoesPage() {
     if (currentFilters.sortBy && currentFilters.sortBy !== "deadline") params.set("sort_by", currentFilters.sortBy);
     if (currentFilters.period) params.set("period", currentFilters.period);
     if (currentFilters.analyzed) params.set("analyzed", currentFilters.analyzed);
+    if (!currentFilters.onlyRelevant) params.set("only_relevant", "false");
     const qs = params.toString();
     const newUrl = qs ? `${pathname}?${qs}` : pathname;
     window.history.replaceState(null, "", newUrl);
@@ -272,6 +274,7 @@ export default function LicitacoesPage() {
       if (filters.period) params.set("period", filters.period);
       if (filters.analyzed && filters.analyzed !== "manual") params.set("analyzed", filters.analyzed);
       if (filters.analyzed === "manual") params.set("source", "manual");
+      if (filters.onlyRelevant) params.set("only_relevant", "true");
 
       syncUrl(page, filters, pageSize);
 
@@ -418,6 +421,20 @@ export default function LicitacoesPage() {
             </Button>
           ))}
         </div>
+        <div className="ml-2 border-l border-slate-700 pl-2 flex gap-2">
+          <Button
+            variant={filters.onlyRelevant ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilters(f => ({ ...f, onlyRelevant: !f.onlyRelevant }))}
+            title={filters.onlyRelevant ? "Mostrando apenas P1/P2. Clique para ver todas as prioridades" : "Mostrando todas as prioridades. Clique para ver apenas P1/P2"}
+            className={filters.onlyRelevant
+              ? "bg-indigo-600 hover:bg-indigo-500 text-white gap-1.5"
+              : "border-slate-700 text-slate-400 hover:text-white gap-1.5"}
+          >
+            <Flame className="h-3.5 w-3.5" />
+            {filters.onlyRelevant ? "P1/P2" : "Todas prio."}
+          </Button>
+        </div>
       </div>
 
       {/* Filters Panel */}
@@ -518,6 +535,7 @@ export default function LicitacoesPage() {
                   sortBy: "deadline",
                   period: "",
                   analyzed: "",
+                  onlyRelevant: true,
                 })
               }
               className="text-slate-400 hover:text-white text-xs"

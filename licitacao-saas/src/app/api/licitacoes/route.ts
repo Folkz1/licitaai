@@ -46,8 +46,15 @@ export async function GET(req: NextRequest) {
 
   if (priority) {
     paramCount++;
-    whereClause += ` AND a.prioridade = $${paramCount}`;
+    whereClause += ` AND l.prioridade_auto = $${paramCount}`;
     params.push(priority);
+  }
+
+  // only_relevant=true: mostra apenas P1/P2 (e nao analisadas ainda)
+  // ignora P3 e REJEITAR — decisao de pipeline da reuniao Erikson
+  const onlyRelevant = searchParams.get("only_relevant");
+  if (onlyRelevant === "true") {
+    whereClause += ` AND (l.prioridade_auto IN ('P1', 'P2') OR l.prioridade_auto IS NULL)`;
   }
 
   if (search) {

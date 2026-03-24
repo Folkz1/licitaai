@@ -1311,8 +1311,8 @@ async function saveAnalysis(
       ? "PRE_TRIAGEM"
       : "ANALISE";
   await query(
-    `UPDATE licitacoes SET status = 'ANALISADA', review_phase = $2, updated_at = NOW() WHERE id = $1`,
-    [licitacaoId, phase]
+    `UPDATE licitacoes SET status = 'ANALISADA', review_phase = $2, prioridade_auto = $3, updated_at = NOW() WHERE id = $1`,
+    [licitacaoId, phase, normalized.prioridade]
   );
 }
 
@@ -1333,7 +1333,7 @@ async function saveRejection(
   );
 
   await query(
-    `UPDATE licitacoes SET status = 'ANALISADA', review_phase = 'REJEITADA', updated_at = NOW() WHERE id = $1`,
+    `UPDATE licitacoes SET status = 'ANALISADA', review_phase = 'REJEITADA', prioridade_auto = 'P3', updated_at = NOW() WHERE id = $1`,
     [licitacaoId]
   );
 }
