@@ -62,6 +62,12 @@ export async function GET(req: NextRequest) {
     whereClause += ` AND (l.objeto_compra ILIKE $${paramIdx} OR l.orgao_nome ILIKE $${paramIdx})`;
     params.push(`%${search}%`);
   }
+  const keyword = searchParams.get("keyword");
+  if (keyword) {
+    paramIdx++;
+    whereClause += ` AND (l.objeto_compra ILIKE $${paramIdx} OR l.orgao_nome ILIKE $${paramIdx} OR l.informacao_complementar ILIKE $${paramIdx})`;
+    params.push(`%${keyword}%`);
+  }
   if (priority) {
     paramIdx++;
     whereClause += ` AND a.prioridade = $${paramIdx}`;

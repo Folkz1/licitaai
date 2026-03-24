@@ -2,6 +2,22 @@ import { getEffectiveTenantId } from "@/lib/tenant";
 import { query } from "@/lib/db";
 import { NextRequest, NextResponse } from "next/server";
 
+export async function GET(_req: NextRequest) {
+  let tenantId: string;
+  try {
+    ({ tenantId } = await getEffectiveTenantId());
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const rows = await query(
+    `SELECT id, palavra, tipo, categoria FROM palavras_chave WHERE tenant_id = $1 AND ativa = TRUE ORDER BY tipo, palavra`,
+    [tenantId]
+  );
+
+  return NextResponse.json({ data: rows });
+}
+
 export async function POST(req: NextRequest) {
   let tenantId: string;
   try {
