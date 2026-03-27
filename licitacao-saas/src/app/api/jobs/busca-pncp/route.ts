@@ -37,13 +37,13 @@ export async function POST() {
 
     // Step 1: BUSCA
     const buscaResult = await executarBusca(tenantId, execId, async (msg) => {
-      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg]);
+      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
     });
 
     // Step 2: ANALISE (right after busca)
     await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, "Etapa 2: Analise IA..."]);
     const analiseResult = await executarAnalise(tenantId, execId, async (msg) => {
-      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg]);
+      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
     }, 15);
 
     const success = buscaResult.success && analiseResult.success;

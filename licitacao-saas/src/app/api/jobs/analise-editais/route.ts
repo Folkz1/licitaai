@@ -32,7 +32,7 @@ export async function POST() {
     );
 
     const result = await executarAnalise(tenantId, execution?.id, async (msg) => {
-      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execution?.id, msg]);
+      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execution?.id, msg.slice(0, 500)]);
     }, 15);
 
     const status = !result.success && result.error?.includes("expirou")

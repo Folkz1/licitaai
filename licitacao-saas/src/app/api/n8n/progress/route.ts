@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     }
     if (current_step) {
       updates.push(`current_step = $${idx++}`);
-      values.push(current_step);
+      values.push(String(current_step).slice(0, 500));
     }
     if (metrics) {
       updates.push(`metrics = COALESCE(metrics, '{}'::jsonb) || $${idx++}::jsonb`);

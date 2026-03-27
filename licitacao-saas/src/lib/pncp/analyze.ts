@@ -100,8 +100,9 @@ async function callLLM(
   temperature = 0.1,
   maxTokens = 4096
 ): Promise<{ content: string; usage: { input_tokens: number; output_tokens: number } }> {
-  // Use OpenAI directly when key is available and model is openai/* (cheaper, no OpenRouter markup)
-  const useDirectOpenAI = !!OPENAI_KEY && model.startsWith("openai/");
+  // Prefer OpenRouter when key is available (supports all model prefixes).
+  // Only fall back to direct OpenAI if no OpenRouter key and model is openai/*.
+  const useDirectOpenAI = !OPENROUTER_KEY && !!OPENAI_KEY && model.startsWith("openai/");
   const url = useDirectOpenAI
     ? "https://api.openai.com/v1/chat/completions"
     : OPENROUTER_URL;
@@ -141,8 +142,8 @@ async function callLLM(
 }
 
 async function getEmbeddings(texts: string[]): Promise<number[][]> {
-  // Use OpenAI directly if key available, otherwise fall back to OpenRouter
-  const useOpenAI = !!OPENAI_KEY;
+  // Prefer OpenRouter when key is available; only fall back to direct OpenAI if no OpenRouter key
+  const useOpenAI = !OPENROUTER_KEY && !!OPENAI_KEY;
   const url = useOpenAI
     ? "https://api.openai.com/v1/embeddings"
     : "https://openrouter.ai/api/v1/embeddings";

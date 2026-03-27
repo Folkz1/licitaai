@@ -201,7 +201,7 @@ async function appendLog(executionId: string | undefined, message: string) {
         current_step = $2,
         logs = COALESCE(logs, '[]'::jsonb) || $3::jsonb
       WHERE id = $1`,
-      [executionId, message, JSON.stringify([{ time: new Date().toISOString(), message, level: "info" }])]
+      [executionId, message.slice(0, 500), JSON.stringify([{ time: new Date().toISOString(), message, level: "info" }])]
     );
   } catch { /* never break pipeline */ }
 }

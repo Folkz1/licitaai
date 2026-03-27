@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS workflow_executions (
   started_at TIMESTAMPTZ DEFAULT NOW(),
   finished_at TIMESTAMPTZ,
   progress INT DEFAULT 0,                 -- 0-100
-  current_step VARCHAR(200),              -- "Buscando no PNCP..." / "Analisando edital 3/10..."
+  current_step TEXT,                       -- "Buscando no PNCP..." / "Analisando edital 3/10..."
   metrics JSONB DEFAULT '{}',             -- { licitacoes_found: 15, editais_analisados: 10, ... }
   error_message TEXT,
   logs JSONB DEFAULT '[]',                -- [{ time, message, level }]
