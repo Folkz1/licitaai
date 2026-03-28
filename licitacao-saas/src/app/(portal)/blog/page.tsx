@@ -29,6 +29,9 @@ export const metadata: Metadata = {
   title: "Blog - Inteligência em Licitações Públicas | LicitaIA",
   description:
     "Resumos semanais, análises de mercado, guias e rankings de licitações públicas. Dados reais do PNCP analisados por IA.",
+  alternates: {
+    canonical: `${APP_URL}/blog`,
+  },
   openGraph: {
     title: "Blog LicitaIA - Inteligência em Licitações",
     description: "Análises, resumos e guias sobre licitações públicas no Brasil.",

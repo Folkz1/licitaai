@@ -1,6 +1,6 @@
 import { query, queryOne } from "@/lib/db";
 import { formatCurrency } from "@/lib/formatters";
-import { PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
+import { APP_URL, PORTAL_PUBLIC_TENANT_ID } from "@/lib/portal";
 import { COMMERCIAL_MESSAGES } from "@/lib/commercial";
 import { Metadata } from "next";
 import Link from "next/link";
@@ -28,6 +28,9 @@ export const metadata: Metadata = {
   title: "LicitaIA - Encontre Licitações do PNCP com Inteligência Artificial",
   description:
     "Monitore 50.000+ licitações públicas do PNCP em 27 estados. IA analisa editais automaticamente, filtra oportunidades relevantes e envia alertas. Teste grátis 7 dias.",
+  alternates: {
+    canonical: APP_URL,
+  },
   openGraph: {
     title: "LicitaIA - Encontre Licitações com IA",
     description:
