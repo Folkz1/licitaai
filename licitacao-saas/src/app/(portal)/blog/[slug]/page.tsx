@@ -67,6 +67,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: `${title} | Blog LicitaIA`,
     description,
+    alternates: {
+      canonical: `${APP_URL}/blog/${slug}`,
+    },
     openGraph: {
       title,
       description,
