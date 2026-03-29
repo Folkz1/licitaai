@@ -19,6 +19,12 @@ const cases = [
     canonical: "https://licitai.mbest.site/precos",
     ogUrl: "https://licitai.mbest.site/precos",
   },
+  {
+    path: "/guia/como-participar-de-licitacoes",
+    title: /Como Participar de Licitações|Como Participar de Licitacoes/i,
+    canonical: "https://licitai.mbest.site/guia/como-participar-de-licitacoes",
+    ogUrl: "https://licitai.mbest.site/guia/como-participar-de-licitacoes",
+  },
 ];
 
 for (const pageCase of cases) {

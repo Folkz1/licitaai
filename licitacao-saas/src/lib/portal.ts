@@ -1,7 +1,7 @@
 import { pool } from "@/lib/db";
 
 export const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  process.env.NEXT_PUBLIC_APP_URL || "https://licitai.mbest.site";
 
 export const PORTAL_PUBLIC_TENANT_ID =
   process.env.PORTAL_PUBLIC_TENANT_ID ||
