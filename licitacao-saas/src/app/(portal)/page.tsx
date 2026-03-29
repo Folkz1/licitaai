@@ -6,7 +6,6 @@ import { Metadata } from "next";
 import Link from "next/link";
 import {
   Search,
-  FileText,
   MapPin,
   TrendingUp,
   ArrowRight,
@@ -36,6 +35,7 @@ export const metadata: Metadata = {
     description:
       "50.000+ licitações monitoradas. IA analisa editais, filtra por relevância e envia alertas. Teste grátis.",
     type: "website",
+    url: APP_URL,
     siteName: "LicitaIA",
   },
 };
