@@ -13,6 +13,7 @@ import { query, queryOne } from "@/lib/db";
 import { assertTenantOperationalAccess } from "@/lib/trial";
 
 const PNCP_API = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao";
+const PNCP_ITENS_API = "https://pncp.gov.br/api/pncp/v1/orgaos";
 const PAGE_SIZE = 50;
 const SITUACOES_VALIDAS = [1]; // 1 = Divulgada no PNCP
 
@@ -59,6 +60,7 @@ interface BuscaStats {
   filtradas_palavra: number;
   filtradas_exclusao: number;
   aprovadas: number;
+  aprovadas_via_itens: number;
   inseridas: number;
   erros_insert: number;
 }
@@ -77,6 +79,26 @@ function normalize(text: string): string {
 
 function formatDate(d: Date): string {
   return d.toISOString().slice(0, 10).replace(/-/g, "");
+}
+
+async function fetchPncpItens(cnpj: string, ano: number, seq: number): Promise<string[]> {
+  try {
+    const url = `${PNCP_ITENS_API}/${cnpj}/compras/${ano}/${seq}/itens`;
+    const res = await fetch(url, {
+      headers: { accept: "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return [];
+    const itens = await res.json();
+    if (!Array.isArray(itens)) return [];
+    return itens
+      .map((i: { descricao?: string; materialOuServicoNome?: string }) =>
+        [i.descricao, i.materialOuServicoNome].filter(Boolean).join(" ")
+      )
+      .filter((s): s is string => Boolean(s));
+  } catch {
+    return []; // falha silenciosa — nunca quebra o pipeline
+  }
 }
 
 function matchKeyword(licitacao: PncpLicitacao, palavra: string): boolean {
@@ -148,6 +170,7 @@ export async function executarBusca(
     filtradas_palavra: 0,
     filtradas_exclusao: 0,
     aprovadas: 0,
+    aprovadas_via_itens: 0,
     inseridas: 0,
     erros_insert: 0,
   };
@@ -232,12 +255,30 @@ export async function executarBusca(
                 }
               }
 
-              // Filter: inclusion keywords (OR)
+              // Filter: inclusion keywords (OR) — com fallback para varredura de itens
+              let aprovouViaItens = false;
               if (inclusao.length > 0) {
-                const match = inclusao.some((p) => matchKeyword(lic, p));
-                if (!match) {
-                  stats.filtradas_palavra++;
-                  continue;
+                const matchPrincipal = inclusao.some((p) => matchKeyword(lic, p));
+                if (!matchPrincipal) {
+                  // Fallback: buscar keyword nos itens do edital via API PNCP
+                  const cnpj = lic.orgaoEntidade?.cnpj;
+                  const ano = lic.anoCompra;
+                  const seq = lic.sequencialCompra;
+                  if (cnpj && ano && seq) {
+                    const descricoes = await fetchPncpItens(cnpj, ano, seq);
+                    const matchItens = descricoes.some((desc) =>
+                      inclusao.some((p) => normalize(desc).includes(normalize(p)))
+                    );
+                    if (!matchItens) {
+                      stats.filtradas_palavra++;
+                      continue;
+                    }
+                    aprovouViaItens = true;
+                    await new Promise((r) => setTimeout(r, 200)); // rate limit itens
+                  } else {
+                    stats.filtradas_palavra++;
+                    continue;
+                  }
                 }
               }
 
@@ -251,6 +292,7 @@ export async function executarBusca(
               }
 
               stats.aprovadas++;
+              if (aprovouViaItens) stats.aprovadas_via_itens++;
 
               // 5. Upsert
               const ufLic = lic.unidadeOrgao?.ufSigla || "";
