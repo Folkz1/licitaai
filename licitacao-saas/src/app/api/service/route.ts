@@ -30,6 +30,16 @@ async function resolveTenant(slug: string) {
 }
 
 export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  // Debug temporario: remover apos confirmar vars
+  if (searchParams.get("action") === "debug") {
+    return NextResponse.json({
+      has_cron: !!process.env.CRON_SECRET,
+      has_service: !!process.env.SERVICE_API_KEY,
+      cron_len: process.env.CRON_SECRET?.length ?? 0,
+      service_len: process.env.SERVICE_API_KEY?.length ?? 0,
+    });
+  }
   if (!authenticate(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
