@@ -42,7 +42,6 @@ export async function GET(req: NextRequest) {
   }
   if (!authenticate(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { searchParams } = new URL(req.url);
   const action = searchParams.get("action") || "status";
   const tenantSlug = searchParams.get("tenant");
 
