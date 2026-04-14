@@ -114,16 +114,31 @@ async function fetchPncpPage(params: {
   url.searchParams.set("tamanhoPagina", String(PAGE_SIZE));
   if (params.uf) url.searchParams.set("uf", params.uf);
 
-  const res = await fetch(url.toString(), {
-    headers: { accept: "application/json" },
-    signal: AbortSignal.timeout(120000),
-  });
-
-  if (!res.ok) {
-    throw new Error(`PNCP API ${res.status}: ${await res.text()}`);
+  const maxAttempts = 4;
+  let lastErr: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url.toString(), {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(30000),
+      });
+      if (res.status >= 500 || res.status === 429) {
+        const body = await res.text();
+        throw new Error(`PNCP API ${res.status}: ${body.slice(0, 200)}`);
+      }
+      if (!res.ok) {
+        throw new Error(`PNCP API ${res.status}: ${await res.text()}`);
+      }
+      return await res.json();
+    } catch (err) {
+      lastErr = err;
+      if (attempt < maxAttempts) {
+        const delay = 1000 * Math.pow(2, attempt - 1);
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
   }
-
-  return res.json();
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 async function appendLog(executionId: string | undefined, log: { time: string; level: string; message: string; step?: string; data?: Record<string, unknown> }) {
