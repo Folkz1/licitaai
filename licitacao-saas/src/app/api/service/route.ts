@@ -12,10 +12,11 @@ import { executarBusca } from "@/lib/pncp/search";
 import { NextRequest, NextResponse } from "next/server";
 
 function authenticate(req: NextRequest): boolean {
-  const key = process.env.SERVICE_API_KEY;
-  if (!key) return false;
+  // Aceita SERVICE_API_KEY ou CRON_SECRET (ambos ja existem no container)
+  const validKeys = [process.env.SERVICE_API_KEY, process.env.CRON_SECRET].filter(Boolean);
+  if (validKeys.length === 0) return false;
   const header = req.headers.get("x-service-key") || req.headers.get("authorization")?.replace("Bearer ", "");
-  return header === key;
+  return validKeys.includes(header ?? "");
 }
 
 async function resolveTenant(slug: string) {
