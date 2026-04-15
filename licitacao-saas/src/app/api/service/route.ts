@@ -99,10 +99,10 @@ export async function POST(req: NextRequest) {
       );
       if (running) return NextResponse.json({ error: "Já existe busca em andamento", execution_id: running.id }, { status: 409 });
 
-      // Cria execução
+      // Cria execução (triggered_by é UUID — não passar string aqui)
       const execution = await queryOne<{ id: string }>(
-        `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
-         VALUES ($1, 'busca+analise', 'RUNNING', 'service-api', 'Iniciando busca via Service API...', $2)
+        `INSERT INTO workflow_executions (tenant_id, workflow_type, status, current_step, logs)
+         VALUES ($1, 'busca+analise', 'RUNNING', 'Iniciando busca via Service API...', $2)
          RETURNING id`,
         [tenant.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada via Service API", level: "info" }])]
       );
