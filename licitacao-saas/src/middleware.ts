@@ -35,6 +35,7 @@ export function middleware(req: NextRequest) {
     pathname.startsWith("/api/jobs/scrape-pncp") ||
     pathname.startsWith("/api/n8n/callback") ||
     pathname.startsWith("/api/cron/") ||
+    pathname.startsWith("/api/service") ||
     pathname.startsWith("/api/webhook/") ||
     pathname.startsWith("/api/leads/enrich") ||
     pathname.startsWith("/api/onboarding/") ||
