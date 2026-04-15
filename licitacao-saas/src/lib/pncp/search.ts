@@ -62,6 +62,8 @@ interface BuscaStats {
   aprovadas: number;
   inseridas: number;
   erros_insert: number;
+  combinacoes_ok: number;
+  combinacoes_erro: number;
 }
 
 export interface BuscaResult {
@@ -186,6 +188,8 @@ export async function executarBusca(
     aprovadas: 0,
     inseridas: 0,
     erros_insert: 0,
+    combinacoes_ok: 0,
+    combinacoes_erro: 0,
   };
 
   try {
@@ -264,6 +268,8 @@ export async function executarBusca(
           if (meta.totalRegistros > 0) {
             await onProgress?.(`UF=${uf || "BR"} mod=${mod} ${dataInicial}-${dataFinal}: ${meta.totalRegistros} resultados, ${totalPaginas} paginas`);
           }
+
+          stats.combinacoes_ok++;
 
           // Process all pages (1s throttle between pages to avoid 429)
           for (let pagina = 1; pagina <= totalPaginas; pagina++) {
@@ -372,6 +378,7 @@ export async function executarBusca(
 
           }
         } catch (err) {
+          stats.combinacoes_erro++;
           const msg = err instanceof Error ? err.message : "Unknown error";
           await onProgress?.(`Erro UF=${uf || "BR"} mod=${mod} ${dataInicial}-${dataFinal}: ${msg}`);
           await appendLog(executionId, {
@@ -403,24 +410,52 @@ export async function executarBusca(
       [tenantId]
     );
 
-    // 7. Update execution
+    // 7. Decide success or failure
+    // Se mais de 50% das combinações falharam E nenhuma licitação foi aprovada,
+    // a busca foi inútil — marcar como ERRO para não enganar o usuário.
+    const totalCombinacoes = stats.combinacoes_ok + stats.combinacoes_erro;
+    const taxaErro = totalCombinacoes > 0 ? stats.combinacoes_erro / totalCombinacoes : 0;
+    const apiInstavel = taxaErro > 0.5 && stats.aprovadas === 0;
+
+    let buscaStatus: "SUCCESS" | "ERROR" | "WARNING";
+    let buscaMsg: string;
+    let buscaSuccess: boolean;
+
+    if (apiInstavel) {
+      buscaStatus = "ERROR";
+      buscaMsg = `API PNCP instavel: ${stats.combinacoes_erro}/${totalCombinacoes} combinacoes falharam com timeout/500. Nenhuma licitacao aprovada. Tente novamente mais tarde.`;
+      buscaSuccess = false;
+    } else if (stats.combinacoes_erro > 0 && stats.aprovadas === 0) {
+      // Alguns erros mas não maioria — WARNING (possível resultado parcial)
+      buscaStatus = "WARNING";
+      buscaMsg = `Busca parcial: ${stats.combinacoes_erro} combinacoes falharam, 0 aprovadas. Dados podem estar incompletos.`;
+      buscaSuccess = false;
+    } else {
+      buscaStatus = "SUCCESS";
+      buscaMsg = `Busca: ${stats.aprovadas} aprovadas de ${stats.total_recebidas}`;
+      buscaSuccess = true;
+    }
+
+    // 8. Update execution
     if (executionId) {
       await query(
         `UPDATE workflow_executions SET
-          status = 'SUCCESS', finished_at = NOW(), progress = 100,
-          current_step = 'Busca concluida',
-          metrics = $2::jsonb,
-          logs = COALESCE(logs, '[]'::jsonb) || $3::jsonb
+          status = $2, finished_at = NOW(), progress = 100,
+          current_step = $3,
+          metrics = $4::jsonb,
+          logs = COALESCE(logs, '[]'::jsonb) || $5::jsonb
         WHERE id = $1`,
         [
           executionId,
+          buscaStatus,
+          buscaMsg.slice(0, 500),
           JSON.stringify(stats),
-          JSON.stringify([{ time: new Date().toISOString(), message: `Busca: ${stats.aprovadas} aprovadas de ${stats.total_recebidas}`, level: "info" }]),
+          JSON.stringify([{ time: new Date().toISOString(), message: buscaMsg, level: buscaSuccess ? "info" : "error" }]),
         ]
       );
     }
 
-    return { success: true, stats };
+    return { success: buscaSuccess, stats, error: buscaSuccess ? undefined : buscaMsg };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
 

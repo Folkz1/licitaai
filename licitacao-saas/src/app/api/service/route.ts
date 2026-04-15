@@ -109,17 +109,14 @@ export async function POST(req: NextRequest) {
       const execId = execution?.id;
 
       // Dispara busca em background (sem await para retornar imediatamente)
+      // Nota: executarBusca já atualiza workflow_executions internamente com status correto (SUCCESS/ERROR/WARNING).
+      // O .catch() aqui só captura exceções inesperadas que escaparam do try/catch interno.
       executarBusca(tenant.id, execId, async (msg) => {
         await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
-      }).then(async (result) => {
-        await query(
-          `UPDATE workflow_executions SET status=$2, finished_at=NOW(), current_step=$3 WHERE id=$1`,
-          [execId, result.success ? "SUCCESS" : "ERROR", result.success ? "Busca concluída" : (result.error || "Erro")]
-        );
       }).catch(async (err) => {
         await query(
-          `UPDATE workflow_executions SET status='ERROR', finished_at=NOW(), error_message=$2 WHERE id=$1`,
-          [execId, String(err)]
+          `UPDATE workflow_executions SET status='ERROR', finished_at=NOW(), current_step=$2 WHERE id=$1`,
+          [execId, `Erro inesperado: ${String(err).slice(0, 200)}`]
         );
       });
 

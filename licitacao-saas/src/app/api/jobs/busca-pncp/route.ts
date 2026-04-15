@@ -40,11 +40,18 @@ export async function POST() {
       await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
     });
 
-    // Step 2: ANALISE (right after busca)
-    await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, "Etapa 2: Analise IA..."]);
-    const analiseResult = await executarAnalise(tenantId, execId, async (msg) => {
-      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
-    }, 15);
+    // Step 2: ANALISE — só roda se a busca teve sucesso e inseriu algo
+    let analiseResult = { success: true, stats: null as unknown, error: undefined as string | undefined };
+    if (!buscaResult.success) {
+      // Busca falhou (API instável, 0 aprovadas) — não há o que analisar
+      // workflow_executions já foi marcado ERROR/WARNING pela busca
+      analiseResult = { success: false, stats: null, error: buscaResult.error };
+    } else {
+      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, "Etapa 2: Analise IA..."]);
+      analiseResult = await executarAnalise(tenantId, execId, async (msg) => {
+        await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
+      }, 15);
+    }
 
     const success = buscaResult.success && analiseResult.success;
     const error = buscaResult.error || analiseResult.error;
