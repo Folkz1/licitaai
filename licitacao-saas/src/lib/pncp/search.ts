@@ -121,10 +121,13 @@ async function fetchPncpPage(params: {
     try {
       const res = await fetch(url.toString(), {
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(60000), // 60s — API gov.br pode ser lenta
+        signal: AbortSignal.timeout(120000), // 120s igual ao pncp-scraper.ts
       });
+      // 204 = sem resultados para esta combinação (modalidade rara / UF sem dados)
+      if (res.status === 204) {
+        return { data: [], totalPaginas: 0, totalRegistros: 0 };
+      }
       if (res.status === 429) {
-        // Rate limited — wait longer, respecting Retry-After if present
         const retryAfter = res.headers.get("retry-after");
         const waitMs = retryAfter
           ? Number(retryAfter) * 1000
