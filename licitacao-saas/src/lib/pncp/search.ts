@@ -122,7 +122,20 @@ async function fetchPncpPage(params: {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(30000),
       });
-      if (res.status >= 500 || res.status === 429) {
+      if (res.status === 429) {
+        // Rate limited — wait longer, respecting Retry-After if present
+        const retryAfter = res.headers.get("retry-after");
+        const waitMs = retryAfter
+          ? Number(retryAfter) * 1000
+          : 30000 * attempt; // 30s, 60s, 90s
+        const body = await res.text();
+        lastErr = new Error(`PNCP API 429: ${body.slice(0, 100)}`);
+        if (attempt < maxAttempts) {
+          await new Promise((r) => setTimeout(r, Math.min(waitMs, 120000)));
+        }
+        continue;
+      }
+      if (res.status >= 500) {
         const body = await res.text();
         throw new Error(`PNCP API ${res.status}: ${body.slice(0, 200)}`);
       }
@@ -133,7 +146,7 @@ async function fetchPncpPage(params: {
     } catch (err) {
       lastErr = err;
       if (attempt < maxAttempts) {
-        const delay = 1000 * Math.pow(2, attempt - 1);
+        const delay = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s for non-429
         await new Promise((r) => setTimeout(r, delay));
       }
     }
@@ -224,8 +237,9 @@ export async function executarBusca(
 
           await onProgress?.(`UF=${uf || "BR"} mod=${mod}: ${meta.totalRegistros} resultados, ${totalPaginas} paginas`);
 
-          // Process all pages
+          // Process all pages (500ms throttle between pages to avoid 429)
           for (let pagina = 1; pagina <= totalPaginas; pagina++) {
+            if (pagina > 1) await new Promise((r) => setTimeout(r, 500));
             const page = pagina === 1 ? meta : await fetchPncpPage({ dataInicial, dataFinal, modalidade: mod, uf, pagina });
             if (!Array.isArray(page.data)) continue;
 
