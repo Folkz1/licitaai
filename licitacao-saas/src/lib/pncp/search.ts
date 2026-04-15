@@ -226,21 +226,29 @@ export async function executarBusca(
     const modalidades = config.modalidades_contratacao?.length ? config.modalidades_contratacao : [6, 8];
     const now = new Date();
 
-    // Fatiar em janelas de 2 dias para evitar timeouts da API do PNCP com datasets grandes
-    // Ex: 30 dias → 15 janelas de 2 dias. Cada janela retorna ~400-600 registros (manejável)
-    const WINDOW_DAYS = 2;
-    const dateWindows: { dataInicial: string; dataFinal: string }[] = [];
-    for (let offset = 0; offset < config.dias_retroativos; offset += WINDOW_DAYS) {
-      const windowEnd = new Date(now.getTime() - offset * 86400000);
-      const windowStart = new Date(now.getTime() - Math.min(offset + WINDOW_DAYS, config.dias_retroativos) * 86400000);
-      dateWindows.push({ dataInicial: formatDate(windowStart), dataFinal: formatDate(windowEnd) });
-    }
+    // Busca incremental: se já existe execução SUCCESS anterior, busca só os últimos 3 dias.
+    // Primeira vez (sem histórico): busca os últimos 7 dias (não 30 — muito lento).
+    // O config.dias_retroativos é usado apenas na primeira execução histórica manual.
+    const ultimaExecucaoBemSucedida = await queryOne<{ finished_at: string }>(
+      `SELECT finished_at FROM workflow_executions
+       WHERE tenant_id = $1 AND status = 'SUCCESS'
+       ORDER BY finished_at DESC LIMIT 1`,
+      [tenantId]
+    );
+    const diasEfetivos = ultimaExecucaoBemSucedida
+      ? 3  // incremental: últimos 3 dias desde última busca bem-sucedida
+      : Math.min(config.dias_retroativos, 7); // primeira vez: máximo 7 dias
 
-    await onProgress?.(`Buscando PNCP: ${ufs.length} UFs x ${modalidades.length} modalidades x ${dateWindows.length} janelas de ${WINDOW_DAYS}d`);
+    // Uma única janela de dias (sem fatiar) — a API lida bem com janelas de até 7 dias por UF
+    const dataFinal = formatDate(now);
+    const dataInicial = formatDate(new Date(now.getTime() - diasEfetivos * 86400000));
+    const dateWindows = [{ dataInicial, dataFinal }];
+
+    await onProgress?.(`Buscando PNCP: ${ufs.length} UFs x ${modalidades.length} modalidades x ${diasEfetivos}d ${ultimaExecucaoBemSucedida ? "(incremental)" : "(inicial)"}`);
     await appendLog(executionId, {
       time: new Date().toISOString(), level: "info", step: "busca_config",
-      message: `Config: ${config.nome} | ${ufs.length} UFs x ${modalidades.length} modalidades | ${config.dias_retroativos} dias (${dateWindows.length} janelas de ${WINDOW_DAYS}d) | Valor min: ${config.valor_minimo}`,
-      data: { config_id: config.id, config_nome: config.nome, ufs, modalidades, dias_retroativos: config.dias_retroativos, window_days: WINDOW_DAYS, windows: dateWindows.length, inclusao_count: inclusao.length, exclusao_count: exclusao.length, inclusao_keywords: inclusao, exclusao_keywords: exclusao },
+      message: `Config: ${config.nome} | ${ufs.length} UFs x ${modalidades.length} modalidades | ${diasEfetivos}d ${ultimaExecucaoBemSucedida ? "(incremental)" : "(inicial)"} | Valor min: ${config.valor_minimo}`,
+      data: { config_id: config.id, config_nome: config.nome, ufs, modalidades, dias_efetivos: diasEfetivos, incremental: !!ultimaExecucaoBemSucedida, inclusao_count: inclusao.length, exclusao_count: exclusao.length, inclusao_keywords: inclusao, exclusao_keywords: exclusao },
     });
 
     // 4. For each UF x modalidade x janela de data, fetch all pages
