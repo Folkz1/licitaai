@@ -67,63 +67,68 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!authenticate(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const body = await req.json().catch(() => ({}));
-  const { action, tenant: tenantSlug } = body;
+  try {
+    const body = await req.json().catch(() => ({}));
+    const { action, tenant: tenantSlug } = body;
 
-  if (action === "health") {
-    const [row] = await query(`SELECT COUNT(*) as total FROM licitacoes`);
-    return NextResponse.json({ ok: true, total_licitacoes: row.total });
-  }
+    if (action === "health") {
+      const [row] = await query(`SELECT COUNT(*) as total FROM licitacoes`);
+      return NextResponse.json({ ok: true, total_licitacoes: row.total });
+    }
 
-  if (action === "unlock") {
-    const tenant = tenantSlug ? await resolveTenant(tenantSlug) : null;
-    if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+    if (action === "unlock") {
+      const tenant = tenantSlug ? await resolveTenant(tenantSlug) : null;
+      if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
 
-    const unlocked = await query(
-      `UPDATE workflow_executions SET status='ERROR', current_step='Destravado via Service API'
-       WHERE tenant_id = $1 AND status IN ('RUNNING','PENDING') RETURNING id`,
-      [tenant.id]
-    );
-    return NextResponse.json({ ok: true, tenant: tenant.nome, unlocked: unlocked.length });
-  }
-
-  if (action === "busca") {
-    const tenant = tenantSlug ? await resolveTenant(tenantSlug) : null;
-    if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
-
-    // Verifica se já tem rodando
-    const running = await queryOne(
-      `SELECT id FROM workflow_executions WHERE tenant_id = $1 AND status IN ('PENDING','RUNNING')`,
-      [tenant.id]
-    );
-    if (running) return NextResponse.json({ error: "Já existe busca em andamento", execution_id: running.id }, { status: 409 });
-
-    // Cria execução
-    const execution = await queryOne<{ id: string }>(
-      `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
-       VALUES ($1, 'busca+analise', 'RUNNING', 'service-api', 'Iniciando busca via Service API...', $2)
-       RETURNING id`,
-      [tenant.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada via Service API", level: "info" }])]
-    );
-    const execId = execution?.id;
-
-    // Dispara busca em background (sem await para retornar imediatamente)
-    executarBusca(tenant.id, execId, async (msg) => {
-      await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
-    }).then(async (result) => {
-      await query(
-        `UPDATE workflow_executions SET status=$2, finished_at=NOW(), current_step=$3 WHERE id=$1`,
-        [execId, result.success ? "SUCCESS" : "ERROR", result.success ? "Busca concluída" : (result.error || "Erro")]
+      const unlocked = await query(
+        `UPDATE workflow_executions SET status='ERROR', current_step='Destravado via Service API'
+         WHERE tenant_id = $1 AND status IN ('RUNNING','PENDING') RETURNING id`,
+        [tenant.id]
       );
-    }).catch(async (err) => {
-      await query(
-        `UPDATE workflow_executions SET status='ERROR', finished_at=NOW(), error_message=$2 WHERE id=$1`,
-        [execId, String(err)]
+      return NextResponse.json({ ok: true, tenant: tenant.nome, unlocked: unlocked.length });
+    }
+
+    if (action === "busca") {
+      const tenant = tenantSlug ? await resolveTenant(tenantSlug) : null;
+      if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+
+      // Verifica se já tem rodando
+      const running = await queryOne(
+        `SELECT id FROM workflow_executions WHERE tenant_id = $1 AND status IN ('PENDING','RUNNING')`,
+        [tenant.id]
       );
-    });
+      if (running) return NextResponse.json({ error: "Já existe busca em andamento", execution_id: running.id }, { status: 409 });
 
-    return NextResponse.json({ ok: true, tenant: tenant.nome, execution_id: execId, message: "Busca iniciada em background" });
+      // Cria execução
+      const execution = await queryOne<{ id: string }>(
+        `INSERT INTO workflow_executions (tenant_id, workflow_type, status, triggered_by, current_step, logs)
+         VALUES ($1, 'busca+analise', 'RUNNING', 'service-api', 'Iniciando busca via Service API...', $2)
+         RETURNING id`,
+        [tenant.id, JSON.stringify([{ time: new Date().toISOString(), message: "Busca disparada via Service API", level: "info" }])]
+      );
+      const execId = execution?.id;
+
+      // Dispara busca em background (sem await para retornar imediatamente)
+      executarBusca(tenant.id, execId, async (msg) => {
+        await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
+      }).then(async (result) => {
+        await query(
+          `UPDATE workflow_executions SET status=$2, finished_at=NOW(), current_step=$3 WHERE id=$1`,
+          [execId, result.success ? "SUCCESS" : "ERROR", result.success ? "Busca concluída" : (result.error || "Erro")]
+        );
+      }).catch(async (err) => {
+        await query(
+          `UPDATE workflow_executions SET status='ERROR', finished_at=NOW(), error_message=$2 WHERE id=$1`,
+          [execId, String(err)]
+        );
+      });
+
+      return NextResponse.json({ ok: true, tenant: tenant.nome, execution_id: execId, message: "Busca iniciada em background" });
+    }
+
+    return NextResponse.json({ error: "Unknown action. Use: health | status | unlock | busca" }, { status: 400 });
+  } catch (err) {
+    console.error("[Service API POST] Unexpected error:", err);
+    return NextResponse.json({ error: "Internal error", detail: String(err) }, { status: 500 });
   }
-
-  return NextResponse.json({ error: "Unknown action. Use: health | status | unlock | busca" }, { status: 400 });
 }
