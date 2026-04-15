@@ -115,13 +115,16 @@ async function fetchPncpPage(params: {
   url.searchParams.set("tamanhoPagina", String(PAGE_SIZE));
   if (params.uf) url.searchParams.set("uf", params.uf);
 
-  const maxAttempts = 4;
+  // Timeout curto (20s) com 2 tentativas para erros de rede.
+  // Timeout = API gov.br fora para essa UF/mod agora — não adianta esperar 120s.
+  // 429 = rate limit — espera longa antes de retentar.
+  const maxAttempts = 2;
   let lastErr: unknown = null;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const res = await fetch(url.toString(), {
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(120000), // 120s igual ao pncp-scraper.ts
+        signal: AbortSignal.timeout(20000), // 20s — se não responde em 20s, está fora
       });
       // 204 = sem resultados para esta combinação (modalidade rara / UF sem dados)
       if (res.status === 204) {
@@ -129,13 +132,11 @@ async function fetchPncpPage(params: {
       }
       if (res.status === 429) {
         const retryAfter = res.headers.get("retry-after");
-        const waitMs = retryAfter
-          ? Number(retryAfter) * 1000
-          : 30000 * attempt; // 30s, 60s, 90s
+        const waitMs = retryAfter ? Number(retryAfter) * 1000 : 30000;
         const body = await res.text();
         lastErr = new Error(`PNCP API 429: ${body.slice(0, 100)}`);
         if (attempt < maxAttempts) {
-          await new Promise((r) => setTimeout(r, Math.min(waitMs, 120000)));
+          await new Promise((r) => setTimeout(r, Math.min(waitMs, 60000)));
         }
         continue;
       }
@@ -149,9 +150,12 @@ async function fetchPncpPage(params: {
       return await res.json();
     } catch (err) {
       lastErr = err;
-      if (attempt < maxAttempts) {
-        const delay = 2000 * Math.pow(2, attempt - 1); // 2s, 4s, 8s for non-429
-        await new Promise((r) => setTimeout(r, delay));
+      // Timeout = servidor fora, não adianta retentar imediatamente
+      const isTimeout = err instanceof Error && err.name === "TimeoutError";
+      if (!isTimeout && attempt < maxAttempts) {
+        await new Promise((r) => setTimeout(r, 3000));
+      } else if (isTimeout) {
+        break; // pula esta combinação — servidor não responde
       }
     }
   }
