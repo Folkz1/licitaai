@@ -13,7 +13,7 @@ import { query, queryOne } from "@/lib/db";
 import { assertTenantOperationalAccess } from "@/lib/trial";
 
 const PNCP_API = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao";
-const PAGE_SIZE = 500; // Máximo permitido pela API (antes era 50 → 10x mais requests desnecessários)
+const PAGE_SIZE = 50; // A API do PNCP retorna "Tamanho de página inválido" acima de 50 na prática
 const PAGE_DELAY_MS = 1000; // 1s entre páginas (antes era 500ms — muito rápido para a API gov.br)
 const SITUACOES_VALIDAS = [1]; // 1 = Divulgada no PNCP
 
@@ -218,25 +218,37 @@ export async function executarBusca(
     const ufs = config.ufs?.length ? config.ufs : [null];
     const modalidades = config.modalidades_contratacao?.length ? config.modalidades_contratacao : [6, 8];
     const now = new Date();
-    const dataFinal = formatDate(now);
-    const dataInicial = formatDate(new Date(now.getTime() - config.dias_retroativos * 86400000));
 
-    await onProgress?.(`Buscando PNCP: ${ufs.length} UFs x ${modalidades.length} modalidades, ${config.dias_retroativos} dias`);
+    // Fatiar em janelas de 2 dias para evitar timeouts da API do PNCP com datasets grandes
+    // Ex: 30 dias → 15 janelas de 2 dias. Cada janela retorna ~400-600 registros (manejável)
+    const WINDOW_DAYS = 2;
+    const dateWindows: { dataInicial: string; dataFinal: string }[] = [];
+    for (let offset = 0; offset < config.dias_retroativos; offset += WINDOW_DAYS) {
+      const windowEnd = new Date(now.getTime() - offset * 86400000);
+      const windowStart = new Date(now.getTime() - Math.min(offset + WINDOW_DAYS, config.dias_retroativos) * 86400000);
+      dateWindows.push({ dataInicial: formatDate(windowStart), dataFinal: formatDate(windowEnd) });
+    }
+
+    await onProgress?.(`Buscando PNCP: ${ufs.length} UFs x ${modalidades.length} modalidades x ${dateWindows.length} janelas de ${WINDOW_DAYS}d`);
     await appendLog(executionId, {
       time: new Date().toISOString(), level: "info", step: "busca_config",
-      message: `Config: ${config.nome} | ${ufs.length} UFs x ${modalidades.length} modalidades | ${config.dias_retroativos} dias | Valor min: ${config.valor_minimo}`,
-      data: { config_id: config.id, config_nome: config.nome, ufs, modalidades, dias_retroativos: config.dias_retroativos, valor_minimo: config.valor_minimo, valor_maximo: config.valor_maximo, inclusao_count: inclusao.length, exclusao_count: exclusao.length, inclusao_keywords: inclusao, exclusao_keywords: exclusao },
+      message: `Config: ${config.nome} | ${ufs.length} UFs x ${modalidades.length} modalidades | ${config.dias_retroativos} dias (${dateWindows.length} janelas de ${WINDOW_DAYS}d) | Valor min: ${config.valor_minimo}`,
+      data: { config_id: config.id, config_nome: config.nome, ufs, modalidades, dias_retroativos: config.dias_retroativos, window_days: WINDOW_DAYS, windows: dateWindows.length, inclusao_count: inclusao.length, exclusao_count: exclusao.length, inclusao_keywords: inclusao, exclusao_keywords: exclusao },
     });
 
-    // 4. For each UF x modalidade, fetch all pages
+    // 4. For each UF x modalidade x janela de data, fetch all pages
     for (const uf of ufs) {
       for (const mod of modalidades) {
+        for (const window of dateWindows) {
+        const { dataInicial, dataFinal } = window;
         try {
           // First call to get metadata
           const meta = await fetchPncpPage({ dataInicial, dataFinal, modalidade: mod, uf, pagina: 1 });
           const totalPaginas = meta.totalPaginas || 1;
 
-          await onProgress?.(`UF=${uf || "BR"} mod=${mod}: ${meta.totalRegistros} resultados, ${totalPaginas} paginas`);
+          if (meta.totalRegistros > 0) {
+            await onProgress?.(`UF=${uf || "BR"} mod=${mod} ${dataInicial}-${dataFinal}: ${meta.totalRegistros} resultados, ${totalPaginas} paginas`);
+          }
 
           // Process all pages (1s throttle between pages to avoid 429)
           for (let pagina = 1; pagina <= totalPaginas; pagina++) {
@@ -343,20 +355,17 @@ export async function executarBusca(
               }
             }
 
-            // Rate limiting between pages
-            if (pagina < totalPaginas) {
-              await new Promise((r) => setTimeout(r, 500));
-            }
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
-          await onProgress?.(`Erro UF=${uf || "BR"} mod=${mod}: ${msg}`);
+          await onProgress?.(`Erro UF=${uf || "BR"} mod=${mod} ${dataInicial}-${dataFinal}: ${msg}`);
           await appendLog(executionId, {
             time: new Date().toISOString(), level: "error", step: "busca_combinacao",
-            message: `Erro UF=${uf || "BR"} mod=${mod}: ${msg.slice(0, 200)}`,
-            data: { uf: uf || "BR", modalidade: mod, error: msg.slice(0, 300) },
+            message: `Erro UF=${uf || "BR"} mod=${mod} ${dataInicial}-${dataFinal}: ${msg.slice(0, 200)}`,
+            data: { uf: uf || "BR", modalidade: mod, dataInicial, dataFinal, error: msg.slice(0, 300) },
           });
         }
+        } // end for window
       }
     }
 
