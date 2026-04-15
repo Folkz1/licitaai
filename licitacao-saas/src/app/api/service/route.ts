@@ -12,14 +12,14 @@ import { executarBusca } from "@/lib/pncp/search";
 import { NextRequest, NextResponse } from "next/server";
 
 function authenticate(req: NextRequest): boolean {
-  // Mesmo padrao do /api/cron/execute que ja funciona em prod
   const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET || process.env.SERVICE_API_KEY;
-  if (!cronSecret) return false;
-  // Aceita tanto "Bearer X" quanto "X" direto (via x-service-key)
   const xKey = req.headers.get("x-service-key");
-  if (xKey === cronSecret) return true;
-  return authHeader === `Bearer ${cronSecret}`;
+  // Aceita CRON_SECRET ou SERVICE_API_KEY independentemente
+  const validKeys = [process.env.CRON_SECRET, process.env.SERVICE_API_KEY].filter(Boolean) as string[];
+  if (validKeys.length === 0) return false;
+  if (xKey && validKeys.includes(xKey)) return true;
+  if (authHeader && validKeys.some((k) => authHeader === `Bearer ${k}`)) return true;
+  return false;
 }
 
 async function resolveTenant(slug: string) {
