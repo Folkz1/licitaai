@@ -13,7 +13,8 @@ import { query, queryOne } from "@/lib/db";
 import { assertTenantOperationalAccess } from "@/lib/trial";
 
 const PNCP_API = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao";
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 500; // Máximo permitido pela API (antes era 50 → 10x mais requests desnecessários)
+const PAGE_DELAY_MS = 1000; // 1s entre páginas (antes era 500ms — muito rápido para a API gov.br)
 const SITUACOES_VALIDAS = [1]; // 1 = Divulgada no PNCP
 
 // --- Types ---
@@ -120,7 +121,7 @@ async function fetchPncpPage(params: {
     try {
       const res = await fetch(url.toString(), {
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(60000), // 60s — API gov.br pode ser lenta
       });
       if (res.status === 429) {
         // Rate limited — wait longer, respecting Retry-After if present
@@ -237,9 +238,9 @@ export async function executarBusca(
 
           await onProgress?.(`UF=${uf || "BR"} mod=${mod}: ${meta.totalRegistros} resultados, ${totalPaginas} paginas`);
 
-          // Process all pages (500ms throttle between pages to avoid 429)
+          // Process all pages (1s throttle between pages to avoid 429)
           for (let pagina = 1; pagina <= totalPaginas; pagina++) {
-            if (pagina > 1) await new Promise((r) => setTimeout(r, 500));
+            if (pagina > 1) await new Promise((r) => setTimeout(r, PAGE_DELAY_MS));
             const page = pagina === 1 ? meta : await fetchPncpPage({ dataInicial, dataFinal, modalidade: mod, uf, pagina });
             if (!Array.isArray(page.data)) continue;
 
