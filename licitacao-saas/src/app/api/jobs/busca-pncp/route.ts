@@ -1,7 +1,7 @@
 import { auth } from "@/lib/auth";
 import { query, queryOne } from "@/lib/db";
 import { executarBusca } from "@/lib/pncp/search";
-import { executarAnalise } from "@/lib/pncp/analyze";
+import { executarAnalise, type AnaliseResult } from "@/lib/pncp/analyze";
 import { assertTenantOperationalAccess } from "@/lib/trial";
 import { NextResponse } from "next/server";
 
@@ -41,7 +41,7 @@ export async function POST() {
     });
 
     // Step 2: ANALISE — só roda se a busca teve sucesso e inseriu algo
-    let analiseResult = { success: true, stats: null as unknown, error: undefined as string | undefined };
+    let analiseResult: AnaliseResult | { success: false; stats: null; error: string | undefined } = { success: true, stats: null as never, error: undefined };
     if (!buscaResult.success) {
       // Busca falhou (API instável, 0 aprovadas) — não há o que analisar
       // workflow_executions já foi marcado ERROR/WARNING pela busca

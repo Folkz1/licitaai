@@ -62,3 +62,8 @@ jobs:
             -f visibility=public || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Deploy via EasyPanel webhook
+        run: |
+          curl -s -X POST http://jz9bd8.easypanel.host:3000/api/deploy/f9f1d7a845b1a5fbcd75ba2ab0cbb2f68577601f89107c2b
+          echo "Deploy triggered"
