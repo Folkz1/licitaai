@@ -169,7 +169,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, tenant: tenant.nome, execution_id: execId, message: "Analise iniciada em background" });
     }
 
-    return NextResponse.json({ error: "Unknown action. Use: health | status | unlock | busca | analise" }, { status: 400 });
+    if (action === "test-analise") {
+      // Teste síncrono para debug — retorna resultado direto
+      const tenant = tenantSlug ? await resolveTenant(tenantSlug) : null;
+      if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+      try {
+        const result = await executarAnalise(tenant.id, undefined, async (msg) => {
+          console.log(`[test-analise] ${msg}`);
+        }, 1); // apenas 1 licitação
+        return NextResponse.json({ ok: true, result });
+      } catch (err) {
+        const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+        return NextResponse.json({ ok: false, error: msg }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ error: "Unknown action. Use: health | status | unlock | busca | analise | test-analise" }, { status: 400 });
   } catch (err) {
     console.error("[Service API POST] Unexpected error:", err);
     return NextResponse.json({ error: "Internal error", detail: String(err) }, { status: 500 });
