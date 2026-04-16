@@ -9,6 +9,7 @@
 
 import { query, queryOne } from "@/lib/db";
 import { executarBusca } from "@/lib/pncp/search";
+import { executarAnalise } from "@/lib/pncp/analyze";
 import { NextRequest, NextResponse } from "next/server";
 
 function authenticate(req: NextRequest): boolean {
@@ -108,17 +109,28 @@ export async function POST(req: NextRequest) {
       );
       const execId = execution?.id;
 
-      // Dispara busca em background (sem await para retornar imediatamente)
-      // Nota: executarBusca já atualiza workflow_executions internamente com status correto (SUCCESS/ERROR/WARNING).
-      // O .catch() aqui só captura exceções inesperadas que escaparam do try/catch interno.
-      executarBusca(tenant.id, execId, async (msg) => {
-        await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
-      }).catch(async (err) => {
-        await query(
-          `UPDATE workflow_executions SET status='ERROR', finished_at=NOW(), current_step=$2 WHERE id=$1`,
-          [execId, `Erro inesperado: ${String(err).slice(0, 200)}`]
-        );
-      });
+      // Dispara busca+analise em background (sem await para retornar imediatamente)
+      (async () => {
+        try {
+          // Step 1: Busca
+          const buscaResult = await executarBusca(tenant.id, execId, async (msg) => {
+            await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
+          });
+
+          // Step 2: Análise — só roda se a busca teve sucesso
+          if (buscaResult.success) {
+            await query(`UPDATE workflow_executions SET current_step = $2, status = 'RUNNING' WHERE id = $1`, [execId, "Etapa 2: Analise IA..."]);
+            await executarAnalise(tenant.id, execId, async (msg) => {
+              await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
+            }, 10);
+          }
+        } catch (err) {
+          await query(
+            `UPDATE workflow_executions SET status='ERROR', finished_at=NOW(), current_step=$2 WHERE id=$1`,
+            [execId, `Erro inesperado: ${String(err).slice(0, 200)}`]
+          );
+        }
+      })();
 
       return NextResponse.json({ ok: true, tenant: tenant.nome, execution_id: execId, message: "Busca iniciada em background" });
     }
