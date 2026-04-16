@@ -31,7 +31,7 @@ interface BuscaConfig {
 
 interface PalavraChave {
   palavra: string;
-  tipo: "INCLUSAO" | "EXCLUSAO";
+  tipo: "INCLUSAO";
   variacoes: string[];
 }
 
@@ -58,7 +58,6 @@ interface BuscaStats {
   filtradas_situacao: number;
   filtradas_data: number;
   filtradas_palavra: number;
-  filtradas_exclusao: number;
   aprovadas: number;
   inseridas: number;
   erros_insert: number;
@@ -96,8 +95,7 @@ function matchKeyword(licitacao: PncpLicitacao, palavra: string): boolean {
     if (campo && normalize(campo).includes(norm)) return true;
   }
 
-  // Fallback: full JSON search
-  return normalize(JSON.stringify(licitacao)).includes(norm);
+  return false;
 }
 
 // --- Main Search ---
@@ -184,7 +182,6 @@ export async function executarBusca(
     filtradas_situacao: 0,
     filtradas_data: 0,
     filtradas_palavra: 0,
-    filtradas_exclusao: 0,
     aprovadas: 0,
     inseridas: 0,
     erros_insert: 0,
@@ -221,9 +218,6 @@ export async function executarBusca(
     );
 
     const inclusao = keywords.filter((k) => k.tipo === "INCLUSAO").map((k) => k.palavra);
-    const exclusao = keywords
-      .filter((k) => k.tipo === "EXCLUSAO")
-      .flatMap((k) => [k.palavra, ...(k.variacoes || [])]);
 
     // 3. Build search combinations
     const ufs = config.ufs?.length ? config.ufs : [null];
@@ -252,7 +246,7 @@ export async function executarBusca(
     await appendLog(executionId, {
       time: new Date().toISOString(), level: "info", step: "busca_config",
       message: `Config: ${config.nome} | ${ufs.length} UFs x ${modalidades.length} modalidades | ${diasEfetivos}d ${ultimaExecucaoBemSucedida ? "(incremental)" : "(inicial)"} | Valor min: ${config.valor_minimo}`,
-      data: { config_id: config.id, config_nome: config.nome, ufs, modalidades, dias_efetivos: diasEfetivos, incremental: !!ultimaExecucaoBemSucedida, inclusao_count: inclusao.length, exclusao_count: exclusao.length, inclusao_keywords: inclusao, exclusao_keywords: exclusao },
+      data: { config_id: config.id, config_nome: config.nome, ufs, modalidades, dias_efetivos: diasEfetivos, incremental: !!ultimaExecucaoBemSucedida, inclusao_count: inclusao.length, inclusao_keywords: inclusao },
     });
 
     // 4. For each UF x modalidade x janela de data, fetch all pages
@@ -300,15 +294,6 @@ export async function executarBusca(
                 const match = inclusao.some((p) => matchKeyword(lic, p));
                 if (!match) {
                   stats.filtradas_palavra++;
-                  continue;
-                }
-              }
-
-              // Filter: exclusion keywords (OR)
-              if (exclusao.length > 0) {
-                const excluded = exclusao.some((p) => matchKeyword(lic, p));
-                if (excluded) {
-                  stats.filtradas_exclusao++;
                   continue;
                 }
               }
