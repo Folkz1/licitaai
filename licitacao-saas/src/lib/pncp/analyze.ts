@@ -467,13 +467,13 @@ async function fetchPncpFiles(ncp: string): Promise<{ url: string; titulo: strin
   }
 }
 
-function buildMultipartBody(pdfBuffer: Buffer, fileName: string): { body: Buffer; boundary: string } {
+function buildMultipartBody(pdfBuffer: Buffer, fileName: string): { body: Uint8Array; boundary: string } {
   const boundary = `----OCRBoundary${Date.now()}`;
   const header = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/pdf\r\n\r\n`
   );
   const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-  return { body: Buffer.concat([header, pdfBuffer, footer]), boundary };
+  return { body: new Uint8Array(Buffer.concat([header, pdfBuffer, footer])), boundary };
 }
 
 async function callOcrSupremo(documents: { url: string; id: string; nome: string; tipo: string }[]): Promise<string> {
@@ -508,7 +508,7 @@ async function callOcrSupremo(documents: { url: string; id: string; nome: string
       const ocrRes = await fetch(`${OCR_SUPREME_URL}/onlyocr/`, {
         method: "POST",
         headers,
-        body,
+        body: body as unknown as BodyInit,
         signal: AbortSignal.timeout(300000), // 5 min for OCR
       });
 
