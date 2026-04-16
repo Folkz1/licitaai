@@ -411,11 +411,15 @@ export async function executarBusca(
     );
 
     // 7. Decide success or failure
-    // Se mais de 50% das combinações falharam E nenhuma licitação foi aprovada,
-    // a busca foi inútil — marcar como ERRO para não enganar o usuário.
+    // Regras de negócio:
+    // - API instável (>50% combos falhou + 0 aprovadas) → ERROR: a busca foi completamente inútil
+    // - 0 aprovadas com qualquer erro → WARNING: dados parciais, algo pode ter faltado
+    // - 0 aprovadas sem nenhum erro → SUCCESS: a API respondeu OK, simplesmente não há licitações que passem nos filtros
+    // - aprovadas > 0 → SUCCESS: funcionou
     const totalCombinacoes = stats.combinacoes_ok + stats.combinacoes_erro;
     const taxaErro = totalCombinacoes > 0 ? stats.combinacoes_erro / totalCombinacoes : 0;
     const apiInstavel = taxaErro > 0.5 && stats.aprovadas === 0;
+    const dadosParciais = stats.combinacoes_erro > 0 && stats.aprovadas === 0;
 
     let buscaStatus: "SUCCESS" | "ERROR" | "WARNING";
     let buscaMsg: string;
@@ -423,16 +427,17 @@ export async function executarBusca(
 
     if (apiInstavel) {
       buscaStatus = "ERROR";
-      buscaMsg = `API PNCP instavel: ${stats.combinacoes_erro}/${totalCombinacoes} combinacoes falharam com timeout/500. Nenhuma licitacao aprovada. Tente novamente mais tarde.`;
+      buscaMsg = `API PNCP instavel: ${stats.combinacoes_erro}/${totalCombinacoes} combinacoes falharam (timeout/500). Nenhuma licitacao aprovada. Tente novamente mais tarde.`;
       buscaSuccess = false;
-    } else if (stats.combinacoes_erro > 0 && stats.aprovadas === 0) {
-      // Alguns erros mas não maioria — WARNING (possível resultado parcial)
+    } else if (dadosParciais) {
+      // Alguns combos falharam, 0 aprovadas — não é um sucesso real
       buscaStatus = "WARNING";
-      buscaMsg = `Busca parcial: ${stats.combinacoes_erro} combinacoes falharam, 0 aprovadas. Dados podem estar incompletos.`;
+      buscaMsg = `Busca incompleta: ${stats.combinacoes_erro} combinacoes falharam por timeout. 0 licitacoes aprovadas (${stats.total_recebidas} recebidas, ${stats.filtradas_palavra} filtradas por palavra). Dados podem estar faltando.`;
       buscaSuccess = false;
     } else {
+      // 0 aprovadas sem erros = filtros legítimos, ou aprovadas > 0 = sucesso pleno
       buscaStatus = "SUCCESS";
-      buscaMsg = `Busca: ${stats.aprovadas} aprovadas de ${stats.total_recebidas}`;
+      buscaMsg = `Busca concluida: ${stats.aprovadas} aprovadas de ${stats.total_recebidas} recebidas`;
       buscaSuccess = true;
     }
 
