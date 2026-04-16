@@ -467,6 +467,15 @@ async function fetchPncpFiles(ncp: string): Promise<{ url: string; titulo: strin
   }
 }
 
+function buildMultipartBody(pdfBuffer: Buffer, fileName: string): { body: Buffer; boundary: string } {
+  const boundary = `----OCRBoundary${Date.now()}`;
+  const header = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/pdf\r\n\r\n`
+  );
+  const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+  return { body: Buffer.concat([header, pdfBuffer, footer]), boundary };
+}
+
 async function callOcrSupremo(documents: { url: string; id: string; nome: string; tipo: string }[]): Promise<string> {
   // Download each PDF from PNCP and send to OCR Supreme as file upload
   const allTexts: string[] = [];
@@ -482,23 +491,24 @@ async function callOcrSupremo(documents: { url: string; id: string; nome: string
         console.error(`[OCR] Download falhou ${doc.url}: ${pdfRes.status}`);
         continue;
       }
-      const pdfBuffer = await pdfRes.arrayBuffer();
-      if (pdfBuffer.byteLength < 100) continue;
+      const arrayBuf = await pdfRes.arrayBuffer();
+      if (arrayBuf.byteLength < 100) continue;
+      const pdfBuffer = Buffer.from(arrayBuf);
 
-      // 2. Build multipart form data
+      // 2. Build multipart body manually (no FormData/Blob dependency)
       const fileName = doc.nome || `${doc.id}.pdf`;
-      const blob = new Blob([pdfBuffer], { type: "application/pdf" });
-      const formData = new FormData();
-      formData.append("file", blob, fileName);
+      const { body, boundary } = buildMultipartBody(pdfBuffer, fileName);
 
       // 3. Send to OCR Supreme /onlyocr/ endpoint (forces OCR on all pages)
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      };
       if (OCR_SUPREME_KEY) headers["X-API-Key"] = OCR_SUPREME_KEY;
 
       const ocrRes = await fetch(`${OCR_SUPREME_URL}/onlyocr/`, {
         method: "POST",
         headers,
-        body: formData,
+        body,
         signal: AbortSignal.timeout(300000), // 5 min for OCR
       });
 
@@ -509,7 +519,6 @@ async function callOcrSupremo(documents: { url: string; id: string; nome: string
       }
 
       const ocrData = await ocrRes.json();
-      // OCR Supreme returns { data: { content: "..." } } or { data: { content_type, content } }
       const text = ocrData?.data?.content || "";
       if (text && text.length > 50) {
         allTexts.push(text);
