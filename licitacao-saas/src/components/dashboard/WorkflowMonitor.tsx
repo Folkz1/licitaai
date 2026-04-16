@@ -92,6 +92,7 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
       case "PENDING": return <Clock className="h-4 w-4 text-amber-400" />;
       case "SUCCESS": return <CheckCircle className="h-4 w-4 text-emerald-400" />;
       case "ERROR": return <XCircle className="h-4 w-4 text-red-400" />;
+      case "WARNING": return <AlertTriangle className="h-4 w-4 text-amber-400" />;
       default: return <Clock className="h-4 w-4 text-slate-500" />;
     }
   }
@@ -102,6 +103,7 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
       RUNNING: { label: "Executando", className: "bg-indigo-500/15 text-indigo-400 border-indigo-500/30" },
       SUCCESS: { label: "Concluído", className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
       ERROR: { label: "Erro", className: "bg-red-500/15 text-red-400 border-red-500/30" },
+      WARNING: { label: "Incompleto", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
     };
     const conf = configs[status] || configs.PENDING;
     return <Badge className={`${conf.className} text-[10px]`}>{conf.label}</Badge>;
@@ -157,6 +159,8 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
             ? "border-indigo-800/40 bg-gradient-to-br from-indigo-950/20 to-slate-900/50"
             : exec.status === "ERROR"
             ? "border-red-800/30 bg-red-950/10"
+            : exec.status === "WARNING"
+            ? "border-amber-800/30 bg-amber-950/10"
             : "border-slate-800/40 bg-slate-900/30"
         }`}
       >
@@ -233,6 +237,14 @@ export function WorkflowMonitor({ onBuscaComplete, onAnaliseComplete }: Workflow
           <div className="mt-2 flex items-start gap-2 rounded-lg bg-red-950/30 border border-red-800/30 px-3 py-2">
             <AlertTriangle className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
             <p className="text-xs text-red-300">{exec.error_message}</p>
+          </div>
+        )}
+
+        {/* Warning message (status WARNING) */}
+        {exec.status === "WARNING" && exec.current_step && (
+          <div className="mt-2 flex items-start gap-2 rounded-lg bg-amber-950/30 border border-amber-800/30 px-3 py-2">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+            <p className="text-xs text-amber-300">{exec.current_step}</p>
           </div>
         )}
 
