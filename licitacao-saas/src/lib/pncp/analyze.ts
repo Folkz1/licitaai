@@ -22,7 +22,8 @@ import {
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
 const OPENROUTER_KEY = process.env.OPENROUTER_API_KEY || "";
 const OPENAI_KEY = process.env.OPENAI_API_KEY || "";
-const OCR_WEBHOOK = "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/ocr-supremo";
+const OCR_SUPREME_URL = process.env.OCR_SUPREME_URL || "https://ocr-supreme.jz9bd8.easypanel.host";
+const OCR_SUPREME_KEY = process.env.OCR_SUPREME_API_KEY || "ocr-supreme-licitaai-2026";
 
 const PRE_TRIAGEM_MODEL = process.env.PRETRIAGEM_MODEL || "openai/gpt-4.1-mini";
 const ANALYSIS_MODEL = process.env.ANALYSIS_MODEL || "openai/gpt-4.1-mini";
@@ -467,32 +468,65 @@ async function fetchPncpFiles(ncp: string): Promise<{ url: string; titulo: strin
 }
 
 async function callOcrSupremo(documents: { url: string; id: string; nome: string; tipo: string }[]): Promise<string> {
-  try {
-    const res = await fetch(OCR_WEBHOOK, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ documents }),
-      signal: AbortSignal.timeout(300000), // 5 min for OCR
-    });
+  // Download each PDF from PNCP and send to OCR Supreme as file upload
+  const allTexts: string[] = [];
 
-    if (!res.ok) {
-      return "";
+  for (const doc of documents) {
+    try {
+      // 1. Download PDF from PNCP
+      const pdfRes = await fetch(doc.url, {
+        headers: { accept: "application/pdf,application/octet-stream,*/*" },
+        signal: AbortSignal.timeout(60000), // 60s to download
+      });
+      if (!pdfRes.ok) {
+        console.error(`[OCR] Download falhou ${doc.url}: ${pdfRes.status}`);
+        continue;
+      }
+      const pdfBuffer = await pdfRes.arrayBuffer();
+      if (pdfBuffer.byteLength < 100) continue;
+
+      // 2. Build multipart form data
+      const fileName = doc.nome || `${doc.id}.pdf`;
+      const blob = new Blob([pdfBuffer], { type: "application/pdf" });
+      const formData = new FormData();
+      formData.append("file", blob, fileName);
+
+      // 3. Send to OCR Supreme /onlyocr/ endpoint (forces OCR on all pages)
+      const headers: Record<string, string> = {};
+      if (OCR_SUPREME_KEY) headers["X-API-Key"] = OCR_SUPREME_KEY;
+
+      const ocrRes = await fetch(`${OCR_SUPREME_URL}/onlyocr/`, {
+        method: "POST",
+        headers,
+        body: formData,
+        signal: AbortSignal.timeout(300000), // 5 min for OCR
+      });
+
+      if (!ocrRes.ok) {
+        const errText = await ocrRes.text().catch(() => "");
+        console.error(`[OCR] OCR Supreme erro ${ocrRes.status}: ${errText.slice(0, 200)}`);
+        continue;
+      }
+
+      const ocrData = await ocrRes.json();
+      // OCR Supreme returns { data: { content: "..." } } or { data: { content_type, content } }
+      const text = ocrData?.data?.content || "";
+      if (text && text.length > 50) {
+        allTexts.push(text);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[OCR] Erro processando ${doc.nome}: ${msg}`);
     }
-
-    const data = await res.json();
-    const text = extractTextFromOcr(data);
-    // Return FULL text — RAG handles context window, no truncation here
-    return text
-      .replace(/\u0000/g, "")
-      .replace(/\\n/g, "\n")
-      .replace(/\\t/g, "\t")
-      .replace(/\r\n/g, "\n")
-      .replace(/\r/g, "\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-  } catch {
-    return "";
   }
+
+  const combined = allTexts.join("\n\n---\n\n");
+  return combined
+    .replace(/\u0000/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 async function buildRagContext(

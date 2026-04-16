@@ -64,29 +64,27 @@ export async function POST(
     if (textField && typeof textField === "string" && textField.length > 10) {
       editalText = textField;
     } else if (file && file instanceof Blob) {
-      // Send file to OCR Supremo webhook
-      const OCR_WEBHOOK = "https://n8n-n8n-start.jz9bd8.easypanel.host/webhook/ocr-supremo";
+      // Send file to OCR Supreme directly (bypass N8N)
+      const OCR_URL = process.env.OCR_SUPREME_URL || "https://ocr-supreme.jz9bd8.easypanel.host";
+      const OCR_KEY = process.env.OCR_SUPREME_API_KEY || "";
       try {
-        // Convert file to base64 URL for OCR
-        const arrayBuffer = await file.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString("base64");
         const fileName = (file as File).name || "edital.pdf";
-        const mimeType = file.type || "application/pdf";
-        const dataUrl = `data:${mimeType};base64,${base64}`;
+        const formData = new FormData();
+        formData.append("file", file, fileName);
 
-        const ocrRes = await fetch(OCR_WEBHOOK, {
+        const headers: Record<string, string> = {};
+        if (OCR_KEY) headers["X-API-Key"] = OCR_KEY;
+
+        const ocrRes = await fetch(`${OCR_URL}/onlyocr/`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            documents: [{ url: dataUrl, id: licitacaoId, nome: fileName, tipo: "Edital" }],
-          }),
+          headers,
+          body: formData,
           signal: AbortSignal.timeout(300000),
         });
 
         if (ocrRes.ok) {
           const ocrData = await ocrRes.json();
-          // Extract text from OCR response
-          editalText = extractOcrText(ocrData);
+          editalText = ocrData?.data?.content || extractOcrText(ocrData);
         }
       } catch (ocrErr) {
         console.error("[ANALYZE] OCR falhou:", ocrErr);
