@@ -135,7 +135,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, tenant: tenant.nome, execution_id: execId, message: "Busca iniciada em background" });
     }
 
-    return NextResponse.json({ error: "Unknown action. Use: health | status | unlock | busca" }, { status: 400 });
+    if (action === "analise") {
+      const tenant = tenantSlug ? await resolveTenant(tenantSlug) : null;
+      if (!tenant) return NextResponse.json({ error: "tenant not found" }, { status: 404 });
+
+      // Cria execução para análise standalone
+      const execution = await queryOne<{ id: string }>(
+        `INSERT INTO workflow_executions (tenant_id, workflow_type, status, current_step, logs)
+         VALUES ($1, 'analise', 'RUNNING', 'Analise IA via Service API...', $2)
+         RETURNING id`,
+        [tenant.id, JSON.stringify([{ time: new Date().toISOString(), message: "Analise disparada via Service API", level: "info" }])]
+      );
+      const execId = execution?.id;
+
+      executarAnalise(tenant.id, execId, async (msg) => {
+        await query(`UPDATE workflow_executions SET current_step = $2 WHERE id = $1`, [execId, msg.slice(0, 500)]);
+      }, 10).catch(async (err) => {
+        await query(
+          `UPDATE workflow_executions SET status='ERROR', finished_at=NOW(), current_step=$2 WHERE id=$1`,
+          [execId, `Erro: ${String(err).slice(0, 200)}`]
+        );
+      });
+
+      return NextResponse.json({ ok: true, tenant: tenant.nome, execution_id: execId, message: "Analise iniciada em background" });
+    }
+
+    return NextResponse.json({ error: "Unknown action. Use: health | status | unlock | busca | analise" }, { status: 400 });
   } catch (err) {
     console.error("[Service API POST] Unexpected error:", err);
     return NextResponse.json({ error: "Internal error", detail: String(err) }, { status: 500 });
