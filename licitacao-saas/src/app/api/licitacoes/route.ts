@@ -59,7 +59,15 @@ export async function GET(req: NextRequest) {
 
   if (search) {
     paramCount++;
-    whereClause += ` AND (l.objeto_compra ILIKE $${paramCount} OR l.orgao_nome ILIKE $${paramCount})`;
+    whereClause += ` AND (
+      l.objeto_compra ILIKE $${paramCount}
+      OR l.orgao_nome ILIKE $${paramCount}
+      OR l.municipio ILIKE $${paramCount}
+      OR l.uf ILIKE $${paramCount}
+      OR l.numero_controle_pncp ILIKE $${paramCount}
+      OR l.modalidade_contratacao ILIKE $${paramCount}
+      OR l.link_sistema_origem ILIKE $${paramCount}
+    )`;
     params.push(`%${search}%`);
   }
 
@@ -70,16 +78,20 @@ export async function GET(req: NextRequest) {
   }
 
   const period = searchParams.get("period");
+  const analyzed = searchParams.get("analyzed");
   if (period === "today") {
-    whereClause += ` AND l.created_at >= CURRENT_DATE`;
+    if (analyzed === "true") {
+      whereClause += ` AND a.id IS NOT NULL AND (a.updated_at AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
+    } else {
+      whereClause += ` AND (l.created_at AT TIME ZONE 'America/Sao_Paulo')::date = (NOW() AT TIME ZONE 'America/Sao_Paulo')::date`;
+    }
   } else if (period === "week") {
     whereClause += ` AND l.created_at >= CURRENT_DATE - INTERVAL '7 days'`;
   } else if (period === "month") {
     whereClause += ` AND l.created_at >= DATE_TRUNC('month', CURRENT_DATE)`;
   }
 
-  const analyzed = searchParams.get("analyzed");
-  if (analyzed === "true") {
+  if (analyzed === "true" && period !== "today") {
     whereClause += ` AND a.id IS NOT NULL`;
   } else if (analyzed === "false") {
     whereClause += ` AND a.id IS NULL`;

@@ -230,67 +230,87 @@ export default function DashboardPage() {
       {stats.todayActivity && (
         <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-r from-indigo-950/30 via-slate-900/50 to-purple-950/30 p-4">
           <div className="flex items-center gap-6 flex-wrap">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15">
+            <Link
+              href="/licitacoes?period=today&analyzed=false&only_relevant=false&sort_by=publicacao"
+              className="group flex items-center gap-2 rounded-lg px-2 py-1 -mx-2 -my-1 transition hover:bg-sky-500/10"
+              title="Ver licitações novas de hoje ainda não analisadas"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/15 transition group-hover:bg-sky-500/25">
                 <FileText className="h-4 w-4 text-sky-400" />
               </div>
               <div>
                 <p className="text-lg font-bold text-white leading-none">
                   +{stats.todayActivity.novas_hoje}
                 </p>
-                <p className="text-[10px] text-slate-500">novas hoje</p>
+                <p className="text-[10px] text-slate-500 group-hover:text-sky-300">novas hoje</p>
               </div>
               {parseInt(stats.todayActivity.novas_ontem) > 0 && (
                 <span className="text-[10px] text-slate-600 ml-1">
                   ({stats.todayActivity.novas_ontem} ontem)
                 </span>
               )}
-            </div>
+            </Link>
 
             <div className="w-px h-8 bg-slate-800" />
 
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15">
+            <Link
+              href="/licitacoes?period=today&analyzed=true&only_relevant=false&sort_by=publicacao"
+              className="group flex items-center gap-2 rounded-lg px-2 py-1 -mx-2 -my-1 transition hover:bg-emerald-500/10"
+              title="Ver licitações analisadas hoje"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 transition group-hover:bg-emerald-500/25">
                 <CheckCircle2 className="h-4 w-4 text-emerald-400" />
               </div>
               <div>
                 <p className="text-lg font-bold text-white leading-none">
                   {stats.todayActivity.analisadas_hoje}
                 </p>
-                <p className="text-[10px] text-slate-500">analisadas hoje</p>
+                <p className="text-[10px] text-slate-500 group-hover:text-emerald-300">analisadas hoje</p>
               </div>
               {parseInt(stats.todayActivity.analisadas_ontem) > 0 && (
                 <span className="text-[10px] text-slate-600 ml-1">
                   ({stats.todayActivity.analisadas_ontem} ontem)
                 </span>
               )}
-            </div>
+            </Link>
 
             {parseInt(stats.todayActivity.analisadas_hoje) > 0 && (
               <>
                 <div className="w-px h-8 bg-slate-800" />
                 <div className="flex items-center gap-3">
                   {parseInt(stats.todayActivity.p1_hoje) > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-500/15 border border-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-400">
+                    <Link
+                      href="/licitacoes?period=today&analyzed=true&priority=P1&only_relevant=false&sort_by=publicacao"
+                      className="inline-flex items-center gap-1 rounded-full bg-red-500/15 border border-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-400 hover:bg-red-500/25"
+                    >
                       <Flame className="h-3 w-3" />
                       {stats.todayActivity.p1_hoje} P1
-                    </span>
+                    </Link>
                   )}
                   {parseInt(stats.todayActivity.p2_hoje) > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-400">
+                    <Link
+                      href="/licitacoes?period=today&analyzed=true&priority=P2&only_relevant=false&sort_by=publicacao"
+                      className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 border border-amber-500/20 px-2.5 py-1 text-xs font-semibold text-amber-400 hover:bg-amber-500/25"
+                    >
                       <Target className="h-3 w-3" />
                       {stats.todayActivity.p2_hoje} P2
-                    </span>
+                    </Link>
                   )}
                   {parseInt(stats.todayActivity.p3_hoje) > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-400">
+                    <Link
+                      href="/licitacoes?period=today&analyzed=true&priority=P3&only_relevant=false&sort_by=publicacao"
+                      className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-400 hover:bg-blue-500/20"
+                    >
                       {stats.todayActivity.p3_hoje} P3
-                    </span>
+                    </Link>
                   )}
                   {parseInt(stats.todayActivity.rejeitadas_ia_hoje) > 0 && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2.5 py-1 text-xs font-medium text-slate-500">
+                    <Link
+                      href="/licitacoes?period=today&analyzed=true&priority=REJEITAR&only_relevant=false&sort_by=publicacao"
+                      className="inline-flex items-center gap-1 rounded-full bg-slate-500/10 px-2.5 py-1 text-xs font-medium text-slate-500 hover:bg-slate-500/20"
+                    >
                       {stats.todayActivity.rejeitadas_ia_hoje} rejeitadas
-                    </span>
+                    </Link>
                   )}
                 </div>
               </>
