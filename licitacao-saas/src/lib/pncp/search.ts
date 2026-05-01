@@ -13,6 +13,7 @@ import { query, queryOne } from "@/lib/db";
 import { assertTenantOperationalAccess } from "@/lib/trial";
 
 const PNCP_API = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao";
+const PNCP_COMPRA_API = "https://pncp.gov.br/pncp-api/v1/orgaos";
 const PAGE_SIZE = 50; // A API do PNCP retorna "Tamanho de página inválido" acima de 50 na prática
 const PAGE_DELAY_MS = 1000; // 1s entre páginas (antes era 500ms — muito rápido para a API gov.br)
 const SITUACOES_VALIDAS = [1]; // 1 = Divulgada no PNCP
@@ -33,6 +34,14 @@ interface PalavraChave {
   palavra: string;
   tipo: "INCLUSAO";
   variacoes: string[];
+}
+
+interface PncpItem {
+  numeroItem?: number;
+  descricao?: string;
+  materialOuServicoNome?: string;
+  materialOuServico?: string;
+  unidadeMedida?: string;
 }
 
 interface PncpLicitacao {
@@ -63,6 +72,7 @@ interface BuscaStats {
   erros_insert: number;
   combinacoes_ok: number;
   combinacoes_erro: number;
+  matches_itens: number;
 }
 
 export interface BuscaResult {
@@ -97,6 +107,64 @@ function matchKeyword(licitacao: PncpLicitacao, palavra: string): boolean {
 
   return false;
 }
+
+function parsePncpCompraRef(licitacao: PncpLicitacao): { cnpj: string; ano: string; sequencial: string } | null {
+  const ncp = licitacao.numeroControlePNCP || "";
+  const parts = ncp.match(/^(\d+)-\d+-(\d+)\/(\d+)$/);
+  const cnpj = parts?.[1] || licitacao.orgaoEntidade?.cnpj;
+  const sequencial = parts?.[2] || licitacao.sequencialCompra;
+  const ano = parts?.[3] || licitacao.anoCompra;
+
+  if (!cnpj || !sequencial || !ano) return null;
+
+  return {
+    cnpj: String(cnpj).replace(/\D/g, ""),
+    ano: String(ano),
+    sequencial: String(Number(sequencial)),
+  };
+}
+
+function matchKeywordInPncpItens(itens: PncpItem[], palavra: string): boolean {
+  const norm = normalize(palavra);
+
+  return itens.some((item) => {
+    const campos = [
+      item.descricao,
+      item.materialOuServicoNome,
+      item.materialOuServico,
+      item.unidadeMedida,
+    ];
+
+    return campos.some((campo) => campo && normalize(campo).includes(norm));
+  });
+}
+
+async function fetchPncpItens(licitacao: PncpLicitacao): Promise<PncpItem[]> {
+  const ref = parsePncpCompraRef(licitacao);
+  if (!ref) return [];
+
+  const url = `${PNCP_COMPRA_API}/${ref.cnpj}/compras/${ref.ano}/${ref.sequencial}/itens`;
+  const res = await fetch(url, {
+    headers: { accept: "application/json" },
+    signal: AbortSignal.timeout(10000),
+  });
+
+  if (res.status === 404 || res.status === 204) return [];
+  if (!res.ok) throw new Error(`PNCP itens ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+  const data = await res.json();
+  if (Array.isArray(data)) return data as PncpItem[];
+  if (Array.isArray(data?.data)) return data.data as PncpItem[];
+
+  return [];
+}
+
+export const __testing = {
+  normalize,
+  parsePncpCompraRef,
+  matchKeyword,
+  matchKeywordInPncpItens,
+};
 
 // --- Main Search ---
 
@@ -187,6 +255,7 @@ export async function executarBusca(
     erros_insert: 0,
     combinacoes_ok: 0,
     combinacoes_erro: 0,
+    matches_itens: 0,
   };
 
   try {
@@ -291,7 +360,32 @@ export async function executarBusca(
 
               // Filter: inclusion keywords (OR)
               if (inclusao.length > 0) {
-                const match = inclusao.some((p) => matchKeyword(lic, p));
+                let match = inclusao.some((p) => matchKeyword(lic, p));
+
+                if (!match) {
+                  try {
+                    const itens = await fetchPncpItens(lic);
+                    match = inclusao.some((p) => matchKeywordInPncpItens(itens, p));
+
+                    if (match) {
+                      stats.matches_itens++;
+                      await onProgress?.(`Match por item PNCP: ${lic.numeroControlePNCP}`);
+                      await appendLog(executionId, {
+                        time: new Date().toISOString(), level: "info", step: "match_itens_pncp",
+                        message: `Licitação aprovada por match nos itens PNCP: ${lic.numeroControlePNCP}`,
+                        data: { ncp: lic.numeroControlePNCP, objeto: lic.objetoCompra?.slice(0, 120), itens_count: itens.length },
+                      });
+                    }
+                  } catch (itemErr) {
+                    const errMsg = itemErr instanceof Error ? itemErr.message : String(itemErr);
+                    await appendLog(executionId, {
+                      time: new Date().toISOString(), level: "warn", step: "fetch_itens_pncp",
+                      message: `Não foi possível consultar itens PNCP para ${lic.numeroControlePNCP}: ${errMsg.slice(0, 200)}`,
+                      data: { ncp: lic.numeroControlePNCP, error: errMsg.slice(0, 300) },
+                    });
+                  }
+                }
+
                 if (!match) {
                   stats.filtradas_palavra++;
                   continue;
